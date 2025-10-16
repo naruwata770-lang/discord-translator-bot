@@ -234,10 +234,7 @@ export interface TranslationResult {
 }
 
 export interface Command {
-  type: 'translate';
-  text: string;
-  sourceLang?: string;
-  targetLang?: string;
+  type: 'auto_on' | 'auto_off' | 'auto_status';
 }
 
 export enum ErrorCode {
@@ -419,14 +416,21 @@ import { Command } from '../types';
 
 export class CommandParser {
   parse(content: string): Command | null {
-    const translateRegex = /^!translate\s+(.+)$/i;
-    const match = content.match(translateRegex);
+    const trimmed = content.trim().toLowerCase();
 
-    if (match) {
-      return {
-        type: 'translate',
-        text: match[1].trim(),
-      };
+    // !auto on
+    if (trimmed === '!auto on') {
+      return { type: 'auto_on' };
+    }
+
+    // !auto off
+    if (trimmed === '!auto off') {
+      return { type: 'auto_off' };
+    }
+
+    // !auto status
+    if (trimmed === '!auto status' || trimmed === '!auto') {
+      return { type: 'auto_status' };
     }
 
     return null;
@@ -800,29 +804,25 @@ export class TranslationService {
 }
 ```
 
-#### Step 11: メッセージディスパッチャー
+#### Step 11: メッセージディスパッチャー（Embed形式）
 
 **`src/utils/messageDispatcher.ts`**
 
 ```typescript
-import { Message, TextChannel } from 'discord.js';
+import { Message, TextChannel, EmbedBuilder } from 'discord.js';
 import { TranslationResult, ErrorCode } from '../types';
 import { TranslationError } from './errors';
 import logger from './logger';
 
 export class MessageDispatcher {
   async sendTranslation(
-    channel: TextChannel,
     result: TranslationResult,
     originalMessage: Message
   ): Promise<void> {
-    const formattedMessage = this.formatMessage(result);
+    const embed = this.buildEmbed(result, originalMessage);
 
     try {
-      await channel.send({
-        content: formattedMessage,
-        reply: { messageReference: originalMessage.id },
-      });
+      await originalMessage.reply({ embeds: [embed] });
       logger.info('Translation sent', { messageId: originalMessage.id });
     } catch (error) {
       logger.error('Failed to send translation', { error });
@@ -835,9 +835,24 @@ export class MessageDispatcher {
     await channel.send(errorMessage);
   }
 
-  private formatMessage(result: TranslationResult): string {
+  async sendCommandResponse(channel: TextChannel, message: string): Promise<void> {
+    await channel.send(message);
+  }
+
+  private buildEmbed(result: TranslationResult, originalMessage: Message): EmbedBuilder {
     const flag = result.sourceLang === 'ja' ? '🇯🇵→🇨🇳' : '🇨🇳→🇯🇵';
-    return `${flag}\n${result.translatedText}`;
+
+    return new EmbedBuilder()
+      .setColor(0x5865F2) // Discordブルー
+      .setAuthor({
+        name: originalMessage.author.username,
+        iconURL: originalMessage.author.displayAvatarURL(),
+      })
+      .setDescription(result.translatedText)
+      .setFooter({
+        text: `${flag} 自動翻訳`,
+      })
+      .setTimestamp();
   }
 
   private formatError(error: Error): string {
@@ -869,7 +884,7 @@ export class MessageDispatcher {
 
 ### Phase 3: Discord統合
 
-#### Step 12: メッセージハンドラー
+#### Step 12: メッセージハンドラー（自動翻訳対応）
 
 **`src/discord/handlers/messageHandler.ts`**
 
@@ -885,6 +900,7 @@ export class MessageHandler {
   private translationService: TranslationService;
   private messageDispatcher: MessageDispatcher;
   private targetChannels: string[];
+  private autoTranslateEnabled: Map<string, boolean> = new Map();
 
   constructor(
     translationService: TranslationService,
@@ -894,6 +910,11 @@ export class MessageHandler {
     this.translationService = translationService;
     this.messageDispatcher = new MessageDispatcher();
     this.targetChannels = targetChannels;
+
+    // デフォルトで自動翻訳はON
+    targetChannels.forEach(channelId => {
+      this.autoTranslateEnabled.set(channelId, true);
+    });
   }
 
   async handle(message: Message): Promise<void> {
@@ -905,30 +926,92 @@ export class MessageHandler {
       return;
     }
 
-    // コマンド解析
+    // コマンド解析（!auto on/off）
     const command = this.commandParser.parse(message.content);
+    if (command) {
+      await this.handleCommand(command, message);
+      return;
+    }
 
-    if (command && command.type === 'translate') {
-      await this.handleTranslateCommand(command.text, message);
+    // 自動翻訳が無効なチャンネルはスキップ
+    if (!this.isAutoTranslateEnabled(message.channelId)) return;
+
+    // 翻訳をスキップすべきメッセージかチェック
+    if (this.shouldSkipTranslation(message)) return;
+
+    // 自動翻訳実行
+    await this.handleAutoTranslation(message);
+  }
+
+  private shouldSkipTranslation(message: Message): boolean {
+    // 短すぎるメッセージ（3文字未満）
+    if (message.content.length < 3) return true;
+
+    // URLのみのメッセージ
+    if (/^https?:\/\//.test(message.content.trim())) return true;
+
+    // 絵文字のみ
+    if (/^[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}]+$/u.test(message.content)) return true;
+
+    // コマンドメッセージ（!で始まる）
+    if (message.content.startsWith('!')) return true;
+
+    // 添付ファイルのみ（テキストなし）
+    if (!message.content && message.attachments.size > 0) return true;
+
+    return false;
+  }
+
+  private isAutoTranslateEnabled(channelId: string): boolean {
+    // デフォルトはtrue（対象チャンネルが空の場合は全チャンネルで有効）
+    if (this.targetChannels.length === 0) return true;
+    return this.autoTranslateEnabled.get(channelId) ?? true;
+  }
+
+  private async handleCommand(command: any, message: Message): Promise<void> {
+    const channelId = message.channelId;
+
+    switch (command.type) {
+      case 'auto_on':
+        this.autoTranslateEnabled.set(channelId, true);
+        await this.messageDispatcher.sendCommandResponse(
+          message.channel as any,
+          '✅ 自動翻訳を有効にしました'
+        );
+        logger.info('Auto-translation enabled', { channelId });
+        break;
+
+      case 'auto_off':
+        this.autoTranslateEnabled.set(channelId, false);
+        await this.messageDispatcher.sendCommandResponse(
+          message.channel as any,
+          '⏸️ 自動翻訳を無効にしました'
+        );
+        logger.info('Auto-translation disabled', { channelId });
+        break;
+
+      case 'auto_status':
+        const enabled = this.isAutoTranslateEnabled(channelId);
+        await this.messageDispatcher.sendCommandResponse(
+          message.channel as any,
+          `📊 自動翻訳: ${enabled ? '✅ 有効' : '⏸️ 無効'}`
+        );
+        break;
     }
   }
 
-  private async handleTranslateCommand(text: string, message: Message): Promise<void> {
+  private async handleAutoTranslation(message: Message): Promise<void> {
     try {
-      logger.info('Translate command received', {
+      logger.info('Auto-translation started', {
         userId: message.author.id,
         channelId: message.channelId,
       });
 
-      const result = await this.translationService.translate(text);
+      const result = await this.translationService.translate(message.content);
 
-      await this.messageDispatcher.sendTranslation(
-        message.channel as any,
-        result,
-        message
-      );
+      await this.messageDispatcher.sendTranslation(result, message);
     } catch (error) {
-      logger.error('Translation command failed', { error });
+      logger.error('Auto-translation failed', { error });
       await this.messageDispatcher.sendError(message.channel as any, error as Error);
     }
   }
@@ -1021,8 +1104,27 @@ npm start
 ### 動作確認
 
 1. Discordサーバーでbotを招待
-2. 対象チャンネルで `!translate こんにちは` と入力
-3. botが翻訳結果を返信すること
+2. 対象チャンネルで以下をテスト:
+
+#### 自動翻訳のテスト
+```
+👤 あなた: こんにちは！今日ゲームする？
+🤖 bot: （Embed形式で翻訳結果を表示）
+       你好！今天玩游戏吗？
+```
+
+#### コマンドのテスト
+```
+!auto off     → 自動翻訳を無効化
+!auto on      → 自動翻訳を有効化
+!auto status  → 現在の状態を確認
+```
+
+#### フィルタリングのテスト
+以下のメッセージは翻訳されないこと:
+- 短いメッセージ: `ok`
+- URLのみ: `https://example.com`
+- 絵文字のみ: `😀👍`
 
 ---
 
@@ -1031,6 +1133,7 @@ npm start
 | 日付 | 版 | 変更内容 | 作成者 |
 |------|---|---------|--------|
 | 2025-10-17 | 1.0 | 初版作成 | Claude Code |
+| 2025-10-17 | 1.1 | 自動翻訳モード追加、Embed形式対応、!autoコマンド追加 | Claude Code |
 
 ---
 

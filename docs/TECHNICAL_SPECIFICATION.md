@@ -117,7 +117,9 @@ class DiscordClient {
 class MessageHandler {
   private commandParser: CommandParser;
   private translationService: TranslationService;
+  private messageDispatcher: MessageDispatcher;
   private config: BotConfig;
+  private autoTranslateEnabled: Map<string, boolean> = new Map();
 
   async handle(message: Message): Promise<void> {
     // bot自身のメッセージを無視
@@ -126,22 +128,53 @@ class MessageHandler {
     // 対象チャンネル判定
     if (!this.isTargetChannel(message.channelId)) return;
 
-    // コマンド解析
+    // コマンド解析（!auto on/off）
     const command = this.commandParser.parse(message.content);
-
     if (command) {
       await this.handleCommand(command, message);
+      return;
     }
+
+    // 自動翻訳が無効なチャンネルはスキップ
+    if (!this.isAutoTranslateEnabled(message.channelId)) return;
+
+    // 翻訳をスキップすべきメッセージかチェック
+    if (this.shouldSkipTranslation(message)) return;
+
+    // 自動翻訳実行
+    await this.handleAutoTranslation(message);
+  }
+
+  private shouldSkipTranslation(message: Message): boolean {
+    // 短すぎるメッセージ（3文字未満）
+    if (message.content.length < 3) return true;
+
+    // URLのみのメッセージ
+    if (/^https?:\/\//.test(message.content.trim())) return true;
+
+    // 絵文字のみ
+    if (/^[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}]+$/u.test(message.content)) return true;
+
+    // コマンドメッセージ（!で始まる）
+    if (message.content.startsWith('!')) return true;
+
+    // 添付ファイルのみ（テキストなし）
+    if (!message.content && message.attachments.size > 0) return true;
+
+    return false;
   }
 
   private isTargetChannel(channelId: string): boolean
+  private isAutoTranslateEnabled(channelId: string): boolean
   private async handleCommand(command: Command, message: Message): Promise<void>
+  private async handleAutoTranslation(message: Message): Promise<void>
 }
 ```
 
 **依存関係**:
-- `CommandParser`: コマンド解析
+- `CommandParser`: コマンド解析（!auto on/off）
 - `TranslationService`: 翻訳実行
+- `MessageDispatcher`: Embed形式での送信
 
 ---
 
@@ -151,23 +184,26 @@ class MessageHandler {
 
 ```typescript
 interface Command {
-  type: 'translate';
-  text: string;
-  sourceLang?: string;
-  targetLang?: string;
+  type: 'auto_on' | 'auto_off' | 'auto_status';
 }
 
 class CommandParser {
   parse(content: string): Command | null {
-    // !translate <テキスト>
-    const translateRegex = /^!translate\s+(.+)$/i;
-    const match = content.match(translateRegex);
+    const trimmed = content.trim().toLowerCase();
 
-    if (match) {
-      return {
-        type: 'translate',
-        text: match[1].trim(),
-      };
+    // !auto on
+    if (trimmed === '!auto on') {
+      return { type: 'auto_on' };
+    }
+
+    // !auto off
+    if (trimmed === '!auto off') {
+      return { type: 'auto_off' };
+    }
+
+    // !auto status
+    if (trimmed === '!auto status' || trimmed === '!auto') {
+      return { type: 'auto_status' };
     }
 
     return null;
@@ -546,22 +582,20 @@ class RateLimiter {
 
 ### 8. MessageDispatcher
 
-**責務**: 翻訳結果の整形・送信
+**責務**: 翻訳結果の整形・送信（Embed形式）
 
 ```typescript
+import { EmbedBuilder } from 'discord.js';
+
 class MessageDispatcher {
   async sendTranslation(
-    channel: TextChannel,
     result: TranslationResult,
     originalMessage: Message
   ): Promise<void> {
-    const formattedMessage = this.formatMessage(result);
+    const embed = this.buildEmbed(result, originalMessage);
 
     try {
-      await channel.send({
-        content: formattedMessage,
-        reply: { messageReference: originalMessage.id },
-      });
+      await originalMessage.reply({ embeds: [embed] });
     } catch (error) {
       logger.error('Failed to send translation', { error });
       throw error;
@@ -573,9 +607,24 @@ class MessageDispatcher {
     await channel.send(errorMessage);
   }
 
-  private formatMessage(result: TranslationResult): string {
+  async sendCommandResponse(channel: TextChannel, message: string): Promise<void> {
+    await channel.send(message);
+  }
+
+  private buildEmbed(result: TranslationResult, originalMessage: Message): EmbedBuilder {
     const flag = result.sourceLang === 'ja' ? '🇯🇵→🇨🇳' : '🇨🇳→🇯🇵';
-    return `${flag}\n${result.translatedText}`;
+
+    return new EmbedBuilder()
+      .setColor(0x5865F2) // Discordブルー
+      .setAuthor({
+        name: originalMessage.author.username,
+        iconURL: originalMessage.author.displayAvatarURL(),
+      })
+      .setDescription(result.translatedText)
+      .setFooter({
+        text: `${flag} 自動翻訳`,
+      })
+      .setTimestamp();
   }
 
   private formatError(error: Error): string {
@@ -671,7 +720,7 @@ class ConfigStore {
 
 ## データフロー
 
-### 翻訳処理フロー
+### 自動翻訳処理フロー
 
 ```
 1. Discord → messageCreate イベント
@@ -679,26 +728,50 @@ class ConfigStore {
 2. MessageHandler: メッセージフィルタリング
    - bot自身のメッセージ？ → スキップ
    - 対象チャンネル？ → 次へ
+   - コマンドメッセージ？ → コマンド処理へ
    ↓
-3. CommandParser: コマンド解析
-   - "!translate <テキスト>" → 翻訳処理へ
-   - それ以外 → スキップ
+3. MessageHandler: 翻訳スキップ判定
+   - 自動翻訳が無効？ → スキップ
+   - 短すぎる（3文字未満）？ → スキップ
+   - URLのみ？ → スキップ
+   - 絵文字のみ？ → スキップ
+   - 添付ファイルのみ？ → スキップ
    ↓
 4. TranslationService: 翻訳実行
    - レート制限チェック
-   - 言語検出
-   - 翻訳先言語決定
+   - 言語検出（日本語 or 中国語）
+   - 翻訳先言語決定（ja→zh, zh→ja）
    ↓
 5. PoeApiClient: API呼び出し
    - プロンプト構築
-   - Poe API呼び出し
+   - Poe API呼び出し（リトライ付き）
    - レスポンス解析
    ↓
-6. MessageDispatcher: 結果送信
-   - メッセージ整形（国旗絵文字付き）
+6. MessageDispatcher: Embed形式で送信
+   - Embed構築（ユーザーアイコン、翻訳結果）
    - Discord送信（リプライ形式）
    ↓
 7. 完了
+```
+
+### コマンド処理フロー（!auto on/off）
+
+```
+1. Discord → messageCreate イベント
+   ↓
+2. MessageHandler: コマンド検出
+   - "!auto on" → 自動翻訳ON
+   - "!auto off" → 自動翻訳OFF
+   - "!auto status" → 現在の状態表示
+   ↓
+3. MessageHandler: 状態更新
+   - チャンネルごとの自動翻訳状態を保存
+   ↓
+4. MessageDispatcher: 確認メッセージ送信
+   - "✅ 自動翻訳を有効にしました"
+   - "⏸️ 自動翻訳を無効にしました"
+   ↓
+5. 完了
 ```
 
 ---
@@ -833,6 +906,7 @@ LOG_LEVEL=info
 | 日付 | 版 | 変更内容 | 作成者 |
 |------|---|---------|--------|
 | 2025-10-17 | 1.0 | 初版作成 | Claude Code |
+| 2025-10-17 | 1.1 | 自動翻訳モード追加、Embed形式対応、!autoコマンド追加 | Claude Code |
 
 ---
 
