@@ -1,0 +1,203 @@
+# Discord自動翻訳bot
+
+Discordで中国人の友達と日本語⇔中国語で楽しくチャットするための自動翻訳bot。
+Poe APIを使用してAI経由で高品質な翻訳を提供します。
+
+## 特徴
+
+- 🌏 **日本語⇔中国語の相互翻訳**
+- 🤖 **AI翻訳エンジン**（Poe API経由）
+- ⚡ **コマンドベース翻訳**（`!translate`）
+- 🔄 **自動言語検出**
+- 🚀 **Railway.appで24時間稼働**
+
+## 使い方
+
+### 基本コマンド
+
+```
+!translate こんにちは
+```
+
+botが自動的に言語を検出して翻訳します：
+
+```
+🇯🇵→🇨🇳
+你好
+```
+
+---
+
+## プロジェクトドキュメント
+
+詳細なドキュメントは `docs/` フォルダにあります：
+
+| ドキュメント | 説明 |
+|-------------|------|
+| [CLAUDE.md](./CLAUDE.md) | プロジェクト憲法（基本原則・開発方針） |
+| [PROJECT_PLAN.md](./docs/PROJECT_PLAN.md) | プロジェクト計画書（要件・スケジュール） |
+| [TECHNICAL_SPECIFICATION.md](./docs/TECHNICAL_SPECIFICATION.md) | 技術仕様書（アーキテクチャ・API設計） |
+| [IMPLEMENTATION_GUIDE.md](./docs/IMPLEMENTATION_GUIDE.md) | 実装ガイド（ディレクトリ構成・開発手順） |
+| [DEPLOYMENT_GUIDE.md](./docs/DEPLOYMENT_GUIDE.md) | デプロイ手順書（GitHub・Railway.app連携） |
+
+---
+
+## 技術スタック
+
+- **言語**: TypeScript + Node.js 20+
+- **Discord API**: discord.js v14
+- **翻訳API**: Poe API（OpenAI互換）
+- **設定管理**: zod（型安全なバリデーション）
+- **ロガー**: pino（構造化ログ）
+- **デプロイ**: Railway.app（自動デプロイ）
+
+---
+
+## クイックスタート
+
+### 前提条件
+
+- Node.js 20.x以上
+- Discord Bot Token
+- Poe API Key
+
+### インストール
+
+```bash
+# リポジトリクローン
+git clone https://github.com/YOUR_USERNAME/discord-translator-bot.git
+cd discord-translator-bot
+
+# 依存関係インストール
+npm install
+
+# 環境変数設定
+cp .env.example .env
+# .envを編集してAPIキー・トークンを設定
+```
+
+### 開発モード起動
+
+```bash
+npm run dev
+```
+
+### 本番ビルド
+
+```bash
+npm run build
+npm start
+```
+
+---
+
+## 環境変数
+
+`.env`ファイルで以下の環境変数を設定してください：
+
+```bash
+# Discord設定
+DISCORD_BOT_TOKEN=your_discord_bot_token_here
+TARGET_CHANNELS=1234567890,0987654321
+
+# Poe API設定
+POE_API_KEY=your_poe_api_key_here
+POE_ENDPOINT_URL=https://api.poe.com/v1/chat/completions
+POE_MODEL_NAME=Claude-3.5-Sonnet
+
+# レート制限設定
+RATE_LIMIT_CONCURRENT=1
+RATE_LIMIT_INTERVAL=1000
+
+# ログレベル
+LOG_LEVEL=info
+NODE_ENV=development
+```
+
+詳細は [.env.example](./.env.example) を参照してください。
+
+---
+
+## デプロイ
+
+### Railway.appへのデプロイ
+
+詳細は [DEPLOYMENT_GUIDE.md](./docs/DEPLOYMENT_GUIDE.md) を参照してください。
+
+1. GitHubリポジトリ作成
+2. Railway.appアカウント作成
+3. GitHubリポジトリと連携
+4. 環境変数設定
+5. 自動デプロイ
+
+---
+
+## プロジェクト構成
+
+```
+discord-translator-bot/
+├── src/
+│   ├── index.ts                    # エントリーポイント
+│   ├── config/                     # 設定管理
+│   ├── discord/                    # Discord統合
+│   ├── services/                   # 翻訳サービス
+│   ├── commands/                   # コマンド解析
+│   ├── utils/                      # ユーティリティ
+│   └── types/                      # 型定義
+├── docs/                           # ドキュメント
+├── tests/                          # テスト
+├── .env.example                    # 環境変数サンプル
+├── package.json
+├── tsconfig.json
+├── Dockerfile
+└── README.md
+```
+
+---
+
+## 開発フェーズ
+
+### ✅ Phase 0: プロジェクトセットアップ（完了）
+- [x] ドキュメント整備
+- [ ] GitHub リポジトリ作成
+- [ ] 開発環境構築
+
+### Phase 1: MVP開発（次のステップ）
+- [ ] Discord bot基本実装
+- [ ] Poe API統合
+- [ ] コマンドベース翻訳（`!translate`）
+- [ ] ローカルでの動作確認
+
+### Phase 2: 機能拡張
+- [ ] 自動翻訳モード
+- [ ] 言語自動検出
+- [ ] エラーハンドリング強化
+
+### Phase 3: デプロイ・運用
+- [ ] Railway.appへのデプロイ
+- [ ] 本番運用開始
+
+---
+
+## ライセンス
+
+MIT
+
+---
+
+## コントリビューション
+
+このプロジェクトは個人用ですが、改善提案は歓迎します。
+
+---
+
+## 参考
+
+- [Discord.js公式ドキュメント](https://discord.js.org/)
+- [Poe API公式ドキュメント](https://developer.poe.com/)
+- [Railway.app公式ドキュメント](https://docs.railway.app/)
+
+---
+
+**作成者**: Claude Code + vibe coding
+**最終更新**: 2025-10-17
