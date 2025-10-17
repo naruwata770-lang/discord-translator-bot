@@ -75,7 +75,9 @@ config.local.json
 # サンプルコード
 sample/
 
-# 開発環境設定
-.devcontainer/
+# Claude Code設定（ユーザー固有）
 .claude/
 .mcp.json
+
+# Husky
+.husky/_
