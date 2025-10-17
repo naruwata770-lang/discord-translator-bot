@@ -189,11 +189,11 @@ discord-translator-bot/
 - [x] TranslationService（翻訳ロジック）- 12テスト
 - [x] MessageDispatcher（Embed送信）- 10テスト
 - [x] MessageHandler（自動翻訳ハンドラ）- 17テスト
+- [x] DiscordClient（Discord統合）- 9テスト
 
-**テスト結果:** 83/83テスト成功 ✅
+**テスト結果:** 92/92テスト成功 ✅
 
 #### 残りのコンポーネント
-- [ ] DiscordClient（Discord統合）
 - [ ] index.ts（エントリーポイント）
 - [ ] ローカルでの動作確認
 
