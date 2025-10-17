@@ -186,11 +186,11 @@ discord-translator-bot/
 - [x] Logger（pino構造化ログ）
 - [x] ConfigStore（zod環境変数管理）
 - [x] PoeApiClient（Poe API通信）- 10テスト
+- [x] TranslationService（翻訳ロジック）- 12テスト
 
-**テスト結果:** 44/44テスト成功 ✅
+**テスト結果:** 56/56テスト成功 ✅
 
 #### 残りのコンポーネント
-- [ ] TranslationService（翻訳ロジック）
 - [ ] MessageDispatcher（Embed送信）
 - [ ] MessageHandler（自動翻訳ハンドラ）
 - [ ] DiscordClient（Discord統合）
