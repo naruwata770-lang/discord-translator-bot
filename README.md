@@ -174,12 +174,27 @@ discord-translator-bot/
 - [x] ドキュメント整備
 - [x] GitHub リポジトリ作成
 - [x] 設計変更（自動翻訳+Embed形式）
+- [x] Codexレビューによる設計修正
 
-### Phase 1: MVP開発（次のステップ）
-- [ ] Discord bot基本実装
-- [ ] Poe API統合
-- [ ] 自動翻訳機能（Embed形式）
-- [ ] `!auto on/off`コマンド
+### 🔄 Phase 1: MVP開発（進行中）
+#### 完了したコンポーネント（TDD）
+- [x] プロジェクト初期化（package.json, tsconfig.json, Jest設定）
+- [x] 型定義・エラークラス
+- [x] LanguageDetector（言語自動検出）- 12テスト
+- [x] CommandParser（!autoコマンド解析）- 13テスト
+- [x] RateLimiter（レート制限）- 9テスト
+- [x] Logger（pino構造化ログ）
+- [x] ConfigStore（zod環境変数管理）
+
+**テスト結果:** 34/34テスト成功 ✅
+
+#### 残りのコンポーネント
+- [ ] PoeApiClient（Poe API通信）
+- [ ] TranslationService（翻訳ロジック）
+- [ ] MessageDispatcher（Embed送信）
+- [ ] MessageHandler（自動翻訳ハンドラ）
+- [ ] DiscordClient（Discord統合）
+- [ ] index.ts（エントリーポイント）
 - [ ] ローカルでの動作確認
 
 ### Phase 2: デプロイ・運用
