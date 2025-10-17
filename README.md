@@ -188,11 +188,11 @@ discord-translator-bot/
 - [x] PoeApiClient（Poe API通信）- 10テスト
 - [x] TranslationService（翻訳ロジック）- 12テスト
 - [x] MessageDispatcher（Embed送信）- 10テスト
+- [x] MessageHandler（自動翻訳ハンドラ）- 17テスト
 
-**テスト結果:** 66/66テスト成功 ✅
+**テスト結果:** 83/83テスト成功 ✅
 
 #### 残りのコンポーネント
-- [ ] MessageHandler（自動翻訳ハンドラ）
 - [ ] DiscordClient（Discord統合）
 - [ ] index.ts（エントリーポイント）
 - [ ] ローカルでの動作確認
