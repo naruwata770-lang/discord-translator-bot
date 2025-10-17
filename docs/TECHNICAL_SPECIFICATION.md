@@ -146,20 +146,24 @@ class MessageHandler {
   }
 
   private shouldSkipTranslation(message: Message): boolean {
-    // 短すぎるメッセージ（3文字未満）
-    if (message.content.length < 3) return true;
+    const trimmed = message.content.trim();
+
+    // 空または極端に短いメッセージ（1文字以下）
+    if (trimmed.length <= 1) return true;
 
     // URLのみのメッセージ
-    if (/^https?:\/\//.test(message.content.trim())) return true;
+    if (/^https?:\/\/\S+$/.test(trimmed)) return true;
 
-    // 絵文字のみ
-    if (/^[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}]+$/u.test(message.content)) return true;
+    // 絵文字のみ（Unicode Extended_Pictographicプロパティを使用）
+    if (/^\p{Extended_Pictographic}+$/u.test(trimmed)) return true;
 
     // コマンドメッセージ（!で始まる）
     if (message.content.startsWith('!')) return true;
 
-    // 添付ファイルのみ（テキストなし）
-    if (!message.content && message.attachments.size > 0) return true;
+    // 添付ファイルまたはEmbedのみ（テキストなし）
+    if (trimmed.length === 0 && (message.attachments.size > 0 || message.embeds.length > 0)) {
+      return true;
+    }
 
     return false;
   }
@@ -595,7 +599,10 @@ class MessageDispatcher {
     const embed = this.buildEmbed(result, originalMessage);
 
     try {
-      await originalMessage.reply({ embeds: [embed] });
+      await originalMessage.reply({
+        embeds: [embed],
+        allowedMentions: { parse: [] }, // メンション保護（@everyoneなどを無効化）
+      });
     } catch (error) {
       logger.error('Failed to send translation', { error });
       throw error;
@@ -624,7 +631,7 @@ class MessageDispatcher {
       .setFooter({
         text: `${flag} 自動翻訳`,
       })
-      .setTimestamp();
+      .setTimestamp(originalMessage.createdAt); // 原文の投稿時刻を使用
   }
 
   private formatError(error: Error): string {
@@ -907,6 +914,7 @@ LOG_LEVEL=info
 |------|---|---------|--------|
 | 2025-10-17 | 1.0 | 初版作成 | Claude Code |
 | 2025-10-17 | 1.1 | 自動翻訳モード追加、Embed形式対応、!autoコマンド追加 | Claude Code |
+| 2025-10-17 | 1.2 | Codexレビュー反映：メンション保護、フィルタリング改善、タイムスタンプ修正 | Claude Code |
 
 ---
 
