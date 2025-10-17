@@ -5,8 +5,8 @@ export class LanguageDetector {
     const hasKatakana = /[\u30a0-\u30ff]/.test(text);
     const hasKanji = /[\u4e00-\u9faf]/.test(text);
 
-    // 日本語固有の句読点
-    const hasJapanesePunctuation = /[、。「」『』・]/.test(text);
+    // 日本語固有の句読点（「。」は中国語でも使われるため除外）
+    const hasJapanesePunctuation = /[、「」『』・]/.test(text);
 
     // 中国語固有の句読点
     const hasChinesePunctuation = /[，。？！：；""''【】（）]/.test(text);
