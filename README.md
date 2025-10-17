@@ -187,11 +187,11 @@ discord-translator-bot/
 - [x] ConfigStore（zod環境変数管理）
 - [x] PoeApiClient（Poe API通信）- 10テスト
 - [x] TranslationService（翻訳ロジック）- 12テスト
+- [x] MessageDispatcher（Embed送信）- 10テスト
 
-**テスト結果:** 56/56テスト成功 ✅
+**テスト結果:** 66/66テスト成功 ✅
 
 #### 残りのコンポーネント
-- [ ] MessageDispatcher（Embed送信）
 - [ ] MessageHandler（自動翻訳ハンドラ）
 - [ ] DiscordClient（Discord統合）
 - [ ] index.ts（エントリーポイント）
