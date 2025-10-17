@@ -53,7 +53,7 @@ describe('MessageDispatcher', () => {
       expect(embed.data.timestamp).toBe('2025-10-17T12:00:00.000Z');
 
       // メンション保護が有効になっていることを確認
-      expect(replyArgs.allowedMentions).toEqual({ parse: [] });
+      expect(replyArgs.allowedMentions).toEqual({ parse: [], repliedUser: false });
     });
 
     it('中国語→日本語の翻訳結果をEmbed形式で送信する', async () => {

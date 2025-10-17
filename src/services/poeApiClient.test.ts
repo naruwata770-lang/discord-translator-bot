@@ -99,8 +99,9 @@ describe('PoeApiClient', () => {
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
-    it('429エラーでRATE_LIMITを投げる', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+    it('429エラーでRATE_LIMITを投げる（リトライ後）', async () => {
+      // 429エラーを4回連続で返す（初回 + 3回リトライ）
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
         status: 429,
         statusText: 'Too Many Requests',
@@ -112,10 +113,14 @@ describe('PoeApiClient', () => {
 
       try {
         await client.translate('test', 'ja', 'zh');
+        fail('Expected TranslationError to be thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(TranslationError);
         expect((error as TranslationError).code).toBe(ErrorCode.RATE_LIMIT);
       }
+
+      // 429エラーはリトライするので、初回 + 3回リトライ = 4回
+      expect(global.fetch).toHaveBeenCalledTimes(4);
     });
 
     it('500エラーでNETWORK_ERRORを投げる', async () => {
@@ -222,27 +227,38 @@ describe('PoeApiClient', () => {
       expect(global.fetch).toHaveBeenCalledTimes(4);
     });
 
-    it('429エラーはリトライしない', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        statusText: 'Too Many Requests',
-        text: async () => 'Rate limit',
-        headers: {
-          get: () => null,
-        },
-      });
+    it('429エラーはRetry-Afterヘッダーを尊重してリトライする', async () => {
+      // 最初の2回は429、3回目は成功
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          statusText: 'Too Many Requests',
+          text: async () => 'Rate limit',
+          headers: {
+            get: (name: string) => (name === 'Retry-After' ? '1' : null),
+          },
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          statusText: 'Too Many Requests',
+          text: async () => 'Rate limit',
+          headers: {
+            get: (name: string) => (name === 'Retry-After' ? '2' : null),
+          },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: 'Success' } }] }),
+        });
 
-      try {
-        await client.translate('test', 'ja', 'zh');
-        fail('Expected TranslationError to be thrown');
-      } catch (error) {
-        expect(error).toBeInstanceOf(TranslationError);
-        expect((error as TranslationError).code).toBe(ErrorCode.RATE_LIMIT);
-      }
+      const result = await client.translate('test', 'ja', 'zh');
 
-      // リトライせず1回のみ
-      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(result).toBe('Success');
+      // 初回 + 2回リトライ = 3回
+      expect(global.fetch).toHaveBeenCalledTimes(3);
     });
   });
 });

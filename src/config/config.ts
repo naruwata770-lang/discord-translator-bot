@@ -48,15 +48,11 @@ export class ConfigStore {
   }
 
   get rateLimitConcurrent(): number {
-    return this.config.RATE_LIMIT_CONCURRENT
-      ? Number(this.config.RATE_LIMIT_CONCURRENT)
-      : 1;
+    return this.config.RATE_LIMIT_CONCURRENT;
   }
 
   get rateLimitInterval(): number {
-    return this.config.RATE_LIMIT_INTERVAL
-      ? Number(this.config.RATE_LIMIT_INTERVAL)
-      : 1000;
+    return this.config.RATE_LIMIT_INTERVAL;
   }
 
   get logLevel(): string {

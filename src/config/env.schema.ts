@@ -14,8 +14,24 @@ export const envSchema = z.object({
   POE_MODEL_NAME: z.string().default('Claude-3.5-Sonnet'),
 
   // レート制限設定
-  RATE_LIMIT_CONCURRENT: z.string().optional(),
-  RATE_LIMIT_INTERVAL: z.string().optional(),
+  RATE_LIMIT_CONCURRENT: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (!val) return 1;
+      const num = Number(val);
+      if (isNaN(num) || num <= 0) return 1;
+      return Math.max(1, Math.floor(num)); // 最小1、整数に丸める
+    }),
+  RATE_LIMIT_INTERVAL: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (!val) return 1000;
+      const num = Number(val);
+      if (isNaN(num) || num <= 0) return 1000;
+      return Math.max(100, Math.floor(num)); // 最小100ms、整数に丸める
+    }),
 
   // ログ設定
   LOG_LEVEL: z

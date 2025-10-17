@@ -41,7 +41,8 @@ export class LanguageDetector {
       return 'zh';
     }
 
-    // デフォルト: 日本語
-    return 'ja';
+    // 日本語・中国語の明確な特徴がない場合（英語など）
+    // 翻訳をスキップできるように'unknown'を返す
+    return 'unknown';
   }
 }

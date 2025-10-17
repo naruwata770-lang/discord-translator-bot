@@ -57,13 +57,14 @@ describe('LanguageDetector', () => {
       expect(detector.detect('今日はいい天気')).toBe('ja');
     });
 
-    it('判定不能な場合はデフォルトで日本語と判定する', () => {
-      expect(detector.detect('ABC123')).toBe('ja');
-      expect(detector.detect('')).toBe('ja');
+    it('判定不能な場合は unknown を返す（英語など）', () => {
+      expect(detector.detect('ABC123')).toBe('unknown');
+      expect(detector.detect('Hello World')).toBe('unknown');
+      expect(detector.detect('')).toBe('unknown');
     });
 
-    it('空白のみの文字列はデフォルトで日本語と判定する', () => {
-      expect(detector.detect('   ')).toBe('ja');
+    it('空白のみの文字列は unknown を返す', () => {
+      expect(detector.detect('   ')).toBe('unknown');
     });
   });
 });

@@ -2,6 +2,8 @@ import { Message, TextChannel } from 'discord.js';
 import { CommandParser } from '../commands/commandParser';
 import { TranslationService } from '../services/translationService';
 import { MessageDispatcher } from './messageDispatcher';
+import { TranslationError } from '../utils/errors';
+import { ErrorCode } from '../types';
 import logger from '../utils/logger';
 
 export class MessageHandler {
@@ -149,6 +151,17 @@ export class MessageHandler {
         targetLang: result.targetLang,
       });
     } catch (error) {
+      // INVALID_INPUTエラー（英語など翻訳対象外の言語）の場合は静かにスキップ
+      if (
+        error instanceof TranslationError &&
+        error.code === ErrorCode.INVALID_INPUT
+      ) {
+        logger.debug('Translation skipped (unsupported language)', {
+          messageId: message.id,
+        });
+        return;
+      }
+
       logger.error('Translation failed', {
         messageId: message.id,
         error,

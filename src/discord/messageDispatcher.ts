@@ -14,7 +14,7 @@ export class MessageDispatcher {
     try {
       await originalMessage.reply({
         embeds: [embed as any],
-        allowedMentions: { parse: [] }, // メンション保護（@everyoneなどを無効化）
+        allowedMentions: { parse: [], repliedUser: false }, // メンション保護（@everyone無効化 + リプライ先メンション無効化）
       });
     } catch (error) {
       logger.error('Failed to send translation', { error });

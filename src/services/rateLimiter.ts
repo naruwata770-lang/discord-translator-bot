@@ -10,7 +10,17 @@ export class RateLimiter {
   constructor(
     private maxConcurrent: number,
     private minInterval: number
-  ) {}
+  ) {
+    // ガード: 最小値を保証
+    if (isNaN(maxConcurrent) || maxConcurrent <= 0) {
+      throw new Error('RateLimiter: maxConcurrent must be a positive number');
+    }
+    if (isNaN(minInterval) || minInterval < 0) {
+      throw new Error('RateLimiter: minInterval must be a non-negative number');
+    }
+    this.maxConcurrent = Math.max(1, Math.floor(maxConcurrent));
+    this.minInterval = Math.max(0, Math.floor(minInterval));
+  }
 
   async acquire(): Promise<void> {
     // スロットを確保してから待機処理に入る

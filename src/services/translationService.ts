@@ -28,6 +28,14 @@ export class TranslationService {
       const sourceLang =
         options?.sourceLang || this.languageDetector.detect(text);
 
+      // 言語が不明な場合はエラーをスロー（英語など、日中以外の言語）
+      if (sourceLang === 'unknown') {
+        throw new TranslationError(
+          'Language could not be detected',
+          ErrorCode.INVALID_INPUT
+        );
+      }
+
       // 翻訳先言語決定（targetLangが指定されていない場合のみ）
       const targetLang =
         options?.targetLang || this.determineTargetLanguage(sourceLang);

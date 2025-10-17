@@ -47,12 +47,26 @@ export class PoeApiClient {
           throw lastError;
         }
 
-        // 指数バックオフで待機
-        const delay = this.calculateBackoff(attempt);
-        logger.warn(`API call failed, retrying in ${delay}ms`, {
-          attempt: attempt + 1,
-          maxRetries: this.maxRetries,
-        });
+        // 429エラーの場合はRetry-Afterヘッダーを尊重
+        let delay: number;
+        if (
+          lastError.code === ErrorCode.RATE_LIMIT &&
+          (lastError as any).retryAfter
+        ) {
+          delay = (lastError as any).retryAfter * 1000; // 秒をミリ秒に変換
+          logger.warn(`Rate limit hit, retrying after ${delay}ms`, {
+            attempt: attempt + 1,
+            maxRetries: this.maxRetries,
+          });
+        } else {
+          // 指数バックオフで待機
+          delay = this.calculateBackoff(attempt);
+          logger.warn(`API call failed, retrying in ${delay}ms`, {
+            attempt: attempt + 1,
+            maxRetries: this.maxRetries,
+          });
+        }
+
         await this.sleep(delay);
       }
     }
@@ -161,10 +175,10 @@ export class PoeApiClient {
   }
 
   private shouldNotRetry(error: TranslationError): boolean {
-    // 認証エラー、レート制限、無効な入力、API形式エラーはリトライしない
+    // 認証エラー、無効な入力、API形式エラーはリトライしない
+    // RATE_LIMITは除外してリトライ可能にする（Retry-Afterを尊重）
     return [
       ErrorCode.AUTH_ERROR,
-      ErrorCode.RATE_LIMIT,
       ErrorCode.INVALID_INPUT,
       ErrorCode.API_ERROR,
     ].includes(error.code);
