@@ -185,11 +185,11 @@ discord-translator-bot/
 - [x] RateLimiter（レート制限）- 9テスト
 - [x] Logger（pino構造化ログ）
 - [x] ConfigStore（zod環境変数管理）
+- [x] PoeApiClient（Poe API通信）- 10テスト
 
-**テスト結果:** 34/34テスト成功 ✅
+**テスト結果:** 44/44テスト成功 ✅
 
 #### 残りのコンポーネント
-- [ ] PoeApiClient（Poe API通信）
 - [ ] TranslationService（翻訳ロジック）
 - [ ] MessageDispatcher（Embed送信）
 - [ ] MessageHandler（自動翻訳ハンドラ）
