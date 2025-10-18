@@ -61,3 +61,4 @@ jobs:
           claude_args: |
             --max-turns 15
             --model claude-sonnet-4-5
+            --approval-policy never
