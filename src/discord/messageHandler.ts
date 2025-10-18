@@ -131,6 +131,31 @@ export class MessageHandler {
     return false;
   }
 
+  /**
+   * 簡易言語検出（ターゲット決定用）
+   * @param text テキスト
+   * @returns 'ja' | 'zh' （デフォルトは'ja'）
+   */
+  private detectProbableLanguage(text: string): 'ja' | 'zh' {
+    // ひらがな・カタカナがあれば確実に日本語
+    if (/[\u3040-\u309f\u30a0-\u30ff]/.test(text)) {
+      return 'ja';
+    }
+
+    // 日本語句読点があれば日本語
+    if (/[。、]/.test(text)) {
+      return 'ja';
+    }
+
+    // 中国語句読点があれば中国語
+    if (/[，。！？；：]/.test(text)) {
+      return 'zh';
+    }
+
+    // 曖昧な場合はデフォルトで日本語（日中友達との会話前提）
+    return 'ja';
+  }
+
   private async handleAutoTranslation(message: Message): Promise<void> {
     const channel = message.channel as TextChannel;
 
@@ -141,14 +166,37 @@ export class MessageHandler {
         userId: message.author.id,
       });
 
-      const result = await this.translationService.translate(message.content);
+      // 2言語同時翻訳を実行
+      // 日本語 → 中国語 + 英語
+      // 中国語 → 日本語 + 英語
+      //
+      // まず簡易的に言語を検出してターゲットを決定
+      const probableSourceLang = this.detectProbableLanguage(message.content);
 
-      await this.dispatcher.sendTranslation(result, message);
+      let targets: { lang: 'ja' | 'zh' | 'en' }[];
+      if (probableSourceLang === 'zh') {
+        // 中国語 → 日本語 + 英語
+        targets = [{ lang: 'ja' }, { lang: 'en' }];
+      } else {
+        // 日本語（デフォルト） → 中国語 + 英語
+        targets = [{ lang: 'zh' }, { lang: 'en' }];
+      }
 
-      logger.info('Translation completed', {
+      const results = await this.translationService.multiTranslate(
+        message.content,
+        targets
+      );
+
+      await this.dispatcher.sendMultiTranslation(
+        results,
+        message,
+        message.content
+      );
+
+      logger.info('Multi-translation completed', {
         messageId: message.id,
-        sourceLang: result.sourceLang,
-        targetLang: result.targetLang,
+        sourceLang: results[0]?.sourceLang,
+        targetCount: results.filter((r) => r.status === 'success').length,
       });
     } catch (error) {
       // INVALID_INPUTエラー（英語など翻訳対象外の言語）の場合は静かにスキップ
