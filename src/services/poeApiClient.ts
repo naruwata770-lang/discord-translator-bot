@@ -198,17 +198,18 @@ export class PoeApiClient {
   /**
    * AI言語検出 + 翻訳（言語を自動検出して翻訳を実行）
    * @param text 翻訳対象のテキスト
+   * @param dictionaryHint 辞書から生成されたヒント（オプション）
    * @returns 翻訳結果
    * @throws {UnsupportedLanguageError} 未対応言語の場合
    * @throws {ValidationError} AI出力が不正な場合
    * @throws {TranslationError} API呼び出しが失敗した場合
    */
-  async translateWithAutoDetect(text: string): Promise<string> {
+  async translateWithAutoDetect(text: string, dictionaryHint?: string): Promise<string> {
     const systemMessage = `You are a precise translation engine for Japanese and Chinese languages.
 Your task is to detect the input language and translate accordingly.
 You must follow the output format exactly.`;
 
-    const userPrompt = `Detect the language and translate:
+    let userPrompt = `Detect the language and translate:
 - Japanese → Chinese (Simplified)
 - Chinese → Japanese
 - Other languages → output exactly "UNSUPPORTED_LANGUAGE"
@@ -231,13 +232,17 @@ Input: Hello World
 Output: UNSUPPORTED_LANGUAGE
 
 Input: 今日はいい天気ですね
-Output: 今天天气很好呢
+Output: 今天天気很好呢
 
 Input: 这个东西坏了
-Output: これは壊れました
+Output: これは壊れました`;
 
-Now translate:
-${text}`;
+    // 辞書ヒントがある場合は追加
+    if (dictionaryHint && dictionaryHint.trim() !== '') {
+      userPrompt += `\n\n${dictionaryHint}`;
+    }
+
+    userPrompt += `\n\nNow translate:\n${text}`;
 
     try {
       const response = await fetch(this.endpointUrl, {

@@ -6,8 +6,10 @@ import { TranslationService } from './services/translationService';
 import { PoeApiClient } from './services/poeApiClient';
 import { LanguageDetector } from './services/languageDetector';
 import { RateLimiter } from './services/rateLimiter';
+import { DictionaryService } from './services/dictionaryService';
 import config from './config/config';
 import logger from './utils/logger';
+import * as path from 'path';
 
 async function main() {
   try {
@@ -24,11 +26,25 @@ async function main() {
       config.poeEndpointUrl,
       config.poeModelName
     );
+
+    // 辞書サービスの初期化（オプショナル）
+    let dictionaryService: DictionaryService | undefined;
+    try {
+      const dictionaryPath = path.join(__dirname, '../dictionaries/strinova.yaml');
+      dictionaryService = new DictionaryService();
+      dictionaryService.loadDictionary(dictionaryPath);
+      logger.info('Dictionary service initialized');
+    } catch (error) {
+      logger.warn('Dictionary service not available', { error });
+      // 辞書がなくても動作するのでエラーにしない
+    }
+
     const translationService = new TranslationService(
       poeApiClient,
       languageDetector,
       rateLimiter,
-      config.useAiDetection
+      config.useAiDetection,
+      dictionaryService
     );
     const commandParser = new CommandParser();
     const dispatcher = new MessageDispatcher();
