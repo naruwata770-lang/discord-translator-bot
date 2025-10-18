@@ -31,12 +31,15 @@ async function main() {
     let dictionaryService: DictionaryService | undefined;
     try {
       const dictionaryPath = path.join(__dirname, '../dictionaries/strinova.yaml');
-      dictionaryService = new DictionaryService();
-      dictionaryService.loadDictionary(dictionaryPath);
+      const tempDictionary = new DictionaryService();
+      tempDictionary.loadDictionary(dictionaryPath);
+      // ロード成功時のみインジェクト
+      dictionaryService = tempDictionary;
       logger.info('Dictionary service initialized');
     } catch (error) {
       logger.warn('Dictionary service not available', { error });
-      // 辞書がなくても動作するのでエラーにしない
+      // 辞書がなくても動作するのでエラーにしない（undefinedのまま）
+      dictionaryService = undefined;
     }
 
     const translationService = new TranslationService(

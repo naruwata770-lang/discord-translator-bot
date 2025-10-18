@@ -2,6 +2,7 @@ import { TranslationService } from './translationService';
 import { PoeApiClient } from './poeApiClient';
 import { LanguageDetector } from './languageDetector';
 import { RateLimiter } from './rateLimiter';
+import { DictionaryService } from './dictionaryService';
 import { TranslationError } from '../utils/errors';
 import { ErrorCode } from '../types';
 
@@ -9,6 +10,7 @@ import { ErrorCode } from '../types';
 jest.mock('./poeApiClient');
 jest.mock('./languageDetector');
 jest.mock('./rateLimiter');
+jest.mock('./dictionaryService');
 
 describe('TranslationService', () => {
   let service: TranslationService;
@@ -223,6 +225,115 @@ describe('TranslationService', () => {
       const result = await service.translate('Hello');
 
       expect(result.targetLang).toBe('ja');
+    });
+  });
+
+  describe('辞書統合 (AI検出モード)', () => {
+    let mockDictionaryService: jest.Mocked<DictionaryService>;
+
+    beforeEach(() => {
+      mockDictionaryService = new DictionaryService() as jest.Mocked<DictionaryService>;
+      mockDictionaryService.findMatches = jest.fn();
+      mockDictionaryService.generatePromptHint = jest.fn();
+
+      // AI検出モード有効、辞書サービスありでサービス再作成
+      service = new TranslationService(
+        mockPoeClient,
+        mockLanguageDetector,
+        mockRateLimiter,
+        true, // useAiDetection = true
+        mockDictionaryService
+      );
+
+      // translateWithAutoDetectをモック化
+      mockPoeClient.translateWithAutoDetect = jest.fn();
+    });
+
+    it('AI検出モードで辞書マッチあり、ヒントをAIに渡す', async () => {
+      const mockMatches = [
+        {
+          entry: {
+            id: 'test',
+            aliases: { zh: ['卡拉'] },
+            targets: { ja: 'ストリノヴァ' },
+          },
+          matchedLanguage: 'zh' as const,
+          matchedTerm: '卡拉',
+          targetTerm: 'ストリノヴァ',
+          targetLanguage: 'ja' as const,
+        },
+      ];
+      const mockHint = 'Use: 卡拉 → ストリノヴァ';
+
+      // detectSimpleLanguageが内部でLanguageDetectorを呼ぶので、中国語を返すようにモック
+      mockLanguageDetector.detect.mockReturnValue('zh');
+      mockDictionaryService.findMatches.mockReturnValue(mockMatches);
+      mockDictionaryService.generatePromptHint.mockReturnValue(mockHint);
+      mockPoeClient.translateWithAutoDetect.mockResolvedValue('ストリノヴァは強い');
+
+      const result = await service.translate('卡拉很强');
+
+      // 辞書マッチングが呼ばれたか
+      expect(mockDictionaryService.findMatches).toHaveBeenCalledWith(
+        '卡拉很强',
+        'zh',
+        'ja'
+      );
+      // ヒント生成が呼ばれたか
+      expect(mockDictionaryService.generatePromptHint).toHaveBeenCalledWith(
+        mockMatches
+      );
+      // AIにヒント付きで呼ばれたか
+      expect(mockPoeClient.translateWithAutoDetect).toHaveBeenCalledWith(
+        '卡拉很强',
+        mockHint
+      );
+      // 結果が正しいか
+      expect(result).toEqual({
+        translatedText: 'ストリノヴァは強い',
+        sourceLang: 'ai-inferred',
+        targetLang: 'ai-inferred',
+      });
+    });
+
+    it('AI検出モードで辞書マッチなし、ヒントなしでAIに渡す', async () => {
+      mockDictionaryService.findMatches.mockReturnValue([]);
+      mockPoeClient.translateWithAutoDetect.mockResolvedValue('你好');
+
+      const result = await service.translate('こんにちは');
+
+      // 辞書マッチングは呼ばれる
+      expect(mockDictionaryService.findMatches).toHaveBeenCalled();
+      // マッチなしなのでヒント生成は呼ばれない
+      expect(mockDictionaryService.generatePromptHint).not.toHaveBeenCalled();
+      // AIにヒントなし（undefined）で呼ばれる
+      expect(mockPoeClient.translateWithAutoDetect).toHaveBeenCalledWith(
+        'こんにちは',
+        undefined
+      );
+      expect(result.translatedText).toBe('你好');
+    });
+
+    it('AI検出モードで辞書サービスなし、ヒントなしでAIに渡す', async () => {
+      // 辞書なしでサービス再作成
+      service = new TranslationService(
+        mockPoeClient,
+        mockLanguageDetector,
+        mockRateLimiter,
+        true, // useAiDetection = true
+        undefined // no dictionary
+      );
+
+      mockPoeClient.translateWithAutoDetect.mockResolvedValue('你好');
+
+      const result = await service.translate('こんにちは');
+
+      // AIにヒントなし（undefined）で呼ばれる
+      expect(mockPoeClient.translateWithAutoDetect).toHaveBeenCalledWith(
+        'こんにちは',
+        undefined
+      );
+      expect(result.translatedText).toBe('你好');
     });
   });
 });
