@@ -31,6 +31,10 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           base_branch: develop  # developブランチベースで作業
+          settings: |
+            {
+              "autoAcceptPermissions": true
+            }
           prompt: |
             以下のIssueで要求されている機能または修正を実装してください。
 
@@ -61,4 +65,3 @@ jobs:
           claude_args: |
             --max-turns 15
             --model claude-sonnet-4-5
-            --approval-policy never
