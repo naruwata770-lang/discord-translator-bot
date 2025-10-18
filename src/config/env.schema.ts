@@ -40,6 +40,14 @@ export const envSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'production', 'test'])
     .default('development'),
+
+  // AI言語検出設定
+  USE_AI_DETECTION: z
+    .string()
+    .optional()
+    .transform((val) => val === 'true')
+    .default('false')
+    .transform((val) => val === 'true'),
 });
 
 export type Env = z.infer<typeof envSchema>;

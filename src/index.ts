@@ -27,7 +27,8 @@ async function main() {
     const translationService = new TranslationService(
       poeApiClient,
       languageDetector,
-      rateLimiter
+      rateLimiter,
+      config.useAiDetection
     );
     const commandParser = new CommandParser();
     const dispatcher = new MessageDispatcher();
