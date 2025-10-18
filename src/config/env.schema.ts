@@ -46,7 +46,7 @@ export const envSchema = z.object({
     .string()
     .optional()
     .transform((val) => val === 'true')
-    .default('false')
+    .default('true')
     .transform((val) => val === 'true'),
 });
 

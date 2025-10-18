@@ -1,0 +1,96 @@
+# Strinovaゲーム用語辞書
+# このファイルはゲーム「Strinova（卡拉彼丘）」で使用する固有名詞・用語の翻訳辞書です
+
+name: Strinovaゲーム用語辞書
+version: 1.0.0
+description: Strinovaのキャラクター名、ゲーム用語の翻訳辞書
+
+entries:
+  # ゲーム名
+  - id: strinova_game
+    aliases:
+      zh: [卡拉彼丘, 卡拉]
+      ja: [ストリノヴァ]
+    targets:
+      ja: ストリノヴァ
+      zh: 卡拉彼丘
+      en: Strinova
+    category: game_name
+    note: ゲーム名の正式名称と略称
+
+  # キャラクター名
+  - id: fuesha
+    aliases:
+      zh: [緋莎]
+    targets:
+      ja: フューシャ
+      zh: 緋莎
+      en: Fuesha
+    category: character
+    note: キャラクター名
+
+  - id: nobunaga
+    aliases:
+      zh: [信]
+      ja: [信長]
+    targets:
+      ja: 信長
+      zh: 信
+      en: Nobunaga
+    category: character
+    note: キャラクター名
+
+  - id: kokona
+    aliases:
+      zh: [心夏]
+    targets:
+      ja: ココナ
+      zh: 心夏
+      en: Kokona
+    category: character
+
+  - id: eika
+    aliases:
+      zh: [艾卡]
+    targets:
+      ja: アイカ
+      zh: 艾卡
+      en: Eika
+    category: character
+
+  # ゲーム用語
+  - id: scissors
+    aliases:
+      zh: [剪刀手]
+    targets:
+      ja: シザーズ
+      zh: 剪刀手
+      en: Scissors
+    category: game_term
+    note: ゲーム内用語
+
+  - id: yuugiri
+    aliases:
+      zh: [忧雾]
+    targets:
+      ja: 夕霧
+      zh: 忧雾
+      en: Yuugiri
+    category: game_term
+
+  - id: star_clinic
+    aliases:
+      zh: [星庇所]
+    targets:
+      ja: 星診療所
+      zh: 星庇所
+    category: location
+    note: ゲーム内の場所
+
+  - id: hoshie
+    aliases:
+      zh: [星绘]
+    targets:
+      ja: 星理恵
+      zh: 星绘
+    category: character
