@@ -27,9 +27,9 @@ describe('LanguageDetector', () => {
       expect(detector.detect('明日、会議')).toBe('ja');
     });
 
-    it('漢字のみで日本語によく使われる漢字があれば日本語と判定する', () => {
-      expect(detector.detect('日本語一二三')).toBe('ja');
-      expect(detector.detect('人間会社')).toBe('ja');
+    it('漢字のみで日本語特有のパターンがあれば日本語と判定する', () => {
+      expect(detector.detect('日本語')).toBe('ja');
+      expect(detector.detect('今日明日')).toBe('ja');
     });
   });
 
@@ -45,6 +45,16 @@ describe('LanguageDetector', () => {
 
     it('漢字のみで日本語特有の漢字がなければ中国語と判定する', () => {
       expect(detector.detect('学习工作')).toBe('zh');
+    });
+
+    it('簡体字を含む文章を中国語と判定する', () => {
+      expect(detector.detect('这个东西坏了')).toBe('zh');
+      expect(detector.detect('彻底解决问题')).toBe('zh');
+    });
+
+    it('中国語特有の単語パターンを検出する', () => {
+      expect(detector.detect('我要学习')).toBe('zh');
+      expect(detector.detect('再来一次')).toBe('zh');
     });
   });
 
