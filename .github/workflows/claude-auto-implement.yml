@@ -66,6 +66,6 @@ jobs:
             - PRの説明に実装内容と変更箇所を詳細に記載
             - テスト方法も記載すること
           claude_args: |
-            --max-turns 15
+            --max-turns 25
             --model claude-sonnet-4-5
             --dangerously-skip-permissions
