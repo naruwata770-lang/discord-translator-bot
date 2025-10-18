@@ -194,4 +194,13 @@ export class PoeApiClient {
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+
+  /**
+   * AI言語検出 + 翻訳（Phase 2で実装予定のスタブ）
+   * @throws {Error} 現在は未実装エラーをスロー
+   */
+  async translateWithAutoDetect(text: string): Promise<string> {
+    // Phase 2で実装予定のスタブ
+    throw new Error("Not implemented yet - USE_AI_DETECTION must be false");
+  }
 }

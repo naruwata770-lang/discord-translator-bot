@@ -261,4 +261,15 @@ describe('PoeApiClient', () => {
       expect(global.fetch).toHaveBeenCalledTimes(3);
     });
   });
+
+  describe('translateWithAutoDetect (Phase 2で実装予定)', () => {
+    // Phase 2で実装予定（現在はスキップ）
+    test.todo('should translate Japanese to Chinese');
+    test.todo('should translate Chinese to Japanese');
+    test.todo('should throw UnsupportedLanguageError for English');
+    test.todo('should skip filler lines and extract translation');
+    test.todo('should throw ValidationError for English-only response');
+    test.todo('should throw ValidationError for empty response');
+    test.todo('should handle timeout');
+  });
 });
