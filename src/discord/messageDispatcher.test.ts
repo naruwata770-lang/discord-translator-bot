@@ -56,6 +56,53 @@ describe('MessageDispatcher', () => {
       expect(replyArgs.allowedMentions).toEqual({ parse: [], repliedUser: false });
     });
 
+    it('サーバー内のメッセージではサーバープロフィールのアイコンとニックネームを使用する', async () => {
+      const mockGuildMessage = {
+        ...mockMessage,
+        member: {
+          displayName: 'ServerNickname',
+          displayAvatarURL: jest.fn().mockReturnValue('https://server-avatar.url'),
+        },
+      } as any;
+
+      const result: TranslationResult = {
+        translatedText: '你好',
+        sourceLang: 'ja',
+        targetLang: 'zh',
+      };
+
+      await dispatcher.sendTranslation(result, mockGuildMessage);
+
+      const replyArgs = (mockGuildMessage.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+
+      // サーバープロフィールのアイコンとニックネームが使用されていることを確認
+      expect(embed.data.author.name).toBe('ServerNickname');
+      expect(embed.data.author.icon_url).toBe('https://server-avatar.url');
+    });
+
+    it('DMではグローバルプロフィールのアイコンとユーザー名を使用する（フォールバック）', async () => {
+      const mockDMMessage = {
+        ...mockMessage,
+        member: null, // DMではmemberがnull
+      } as any;
+
+      const result: TranslationResult = {
+        translatedText: '你好',
+        sourceLang: 'ja',
+        targetLang: 'zh',
+      };
+
+      await dispatcher.sendTranslation(result, mockDMMessage);
+
+      const replyArgs = (mockDMMessage.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+
+      // グローバルプロフィールにフォールバックすることを確認
+      expect(embed.data.author.name).toBe('TestUser');
+      expect(embed.data.author.icon_url).toBe('https://avatar.url');
+    });
+
     it('中国語→日本語の翻訳結果をEmbed形式で送信する', async () => {
       const result: TranslationResult = {
         translatedText: 'こんにちは',
