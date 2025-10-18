@@ -80,23 +80,41 @@ MCPツールとして、Claude Code内から直接呼び出し可能です。
 - `config`パラメータで`model`を指定すると応答が返ってこない
 
 ### Claude Code Action (GitHub統合)
-PRを作成すると、GitHub上の別のClaude Codeインスタンスが自動レビューを実施します。
+GitHub Issueから自動実装、PRレビューまでを自動化します。
+
+#### Issue自動実装について
+Issueに`claude-implement`ラベルを付けると:
+- GitHub Actions上で別のClaude Codeが起動（`--dangerously-skip-permissions`で完全自動実行）
+- Issueの要求に基づいてコード実装
+- 新しいブランチを作成してPRを自動作成
+- **環境変数なし**のサンドボックス環境で動作（セキュリティ確保）
+
+#### GitHub Actions環境での安全ルール
+**GitHub ActionsのClaude Codeが従うべき制約**:
+
+✅ **変更可能範囲**:
+- `src/`ディレクトリ内のTypeScriptファイル
+- `docs/`ディレクトリ内のMarkdownファイル
+- テストファイル（`__tests__/`, `*.test.ts`）
+
+❌ **絶対に禁止**:
+- APIキーやトークンをコード内にハードコードしない
+- 環境変数(`process.env`)全体をログ出力しない
+- `.env`ファイルを新規作成しない（環境変数を使用すること）
+- `.gitignore`に含まれるファイルを新規作成してコミットしない
+- `.github/workflows/`の変更（ワークフロー自己改変の禁止）
+- `package.json`の依存関係変更（セキュリティリスク）
 
 #### PR自動レビューについて
-実装完了後、PRを作成すると:
+PRを作成すると:
 - GitHub Actionsで別のClaude Codeが起動
 - 本プロジェクトの品質基準（CLAUDE.md）に基づいてレビュー
 - TypeScript型安全性、エラーハンドリング、セキュリティなどをチェック
 - コメントで指摘・改善提案を受け取る
 
-#### レビュー後の対応
-- レビューコメントの指摘事項を確認
-- 修正が必要な場合は対応してコミット
-- GitHub上のClaudeからの提案を真摯に受け止める
-- 追加の質問があればPRコメントで`@claude`メンション可能
-
 #### ワークフロー
-- `.github/workflows/claude-auto-review.yml`: PR自動レビュー設定
+- `.github/workflows/claude-auto-implement.yml`: Issue自動実装
+- `.github/workflows/claude-auto-review.yml`: PR自動レビュー
 - 詳細: [docs/CLAUDE_CODE_ACTION_GUIDE.md](/docs/CLAUDE_CODE_ACTION_GUIDE.md)
 
 #### レビュープロセス（重要）
