@@ -138,15 +138,11 @@ export class MessageDispatcher {
     originalMessage: Message,
     originalText: string
   ): EmbedBuilder {
-    // サーバープロフィールを優先、DMの場合はグローバルプロフィールにフォールバック
-    const displayName = originalMessage.member?.displayName ?? originalMessage.author.username;
-    const avatarURL = originalMessage.member?.displayAvatarURL() ?? originalMessage.author.displayAvatarURL();
-
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
       .setAuthor({
-        name: displayName,
-        iconURL: avatarURL,
+        name: originalMessage.author.username,
+        iconURL: originalMessage.author.displayAvatarURL(),
       })
       .setTimestamp(originalMessage.createdAt);
 
@@ -189,10 +185,6 @@ export class MessageDispatcher {
     originalMessage: Message,
     originalText: string
   ): EmbedBuilder[] {
-    // サーバープロフィールを優先、DMの場合はグローバルプロフィールにフォールバック
-    const displayName = originalMessage.member?.displayName ?? originalMessage.author.username;
-    const avatarURL = originalMessage.member?.displayAvatarURL() ?? originalMessage.author.displayAvatarURL();
-
     const embeds: EmbedBuilder[] = [];
 
     for (const result of results) {
@@ -203,8 +195,8 @@ export class MessageDispatcher {
         const embed = new EmbedBuilder()
           .setColor(0x5865f2)
           .setAuthor({
-            name: displayName,
-            iconURL: avatarURL,
+            name: originalMessage.author.username,
+            iconURL: originalMessage.author.displayAvatarURL(),
           })
           .setDescription(this.truncateField(result.translatedText, 4096))
           .setFooter({

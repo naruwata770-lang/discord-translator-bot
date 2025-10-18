@@ -216,4 +216,87 @@ describe('MessageDispatcher', () => {
       expect(mockChannel.send).toHaveBeenCalledWith('✅ 自動翻訳を有効にしました');
     });
   });
+
+  describe('sendMultiTranslation', () => {
+    it('全ての結果がINVALID_INPUTエラーの場合は静かにスキップする', async () => {
+      const results = [
+        {
+          status: 'error' as const,
+          sourceLang: 'unknown',
+          targetLang: 'zh',
+          errorCode: ErrorCode.INVALID_INPUT,
+          errorMessage: 'Language could not be detected',
+        },
+        {
+          status: 'error' as const,
+          sourceLang: 'unknown',
+          targetLang: 'en',
+          errorCode: ErrorCode.INVALID_INPUT,
+          errorMessage: 'Language could not be detected',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessage, 'Hello');
+
+      // メッセージが送信されないことを確認
+      expect(mockMessage.reply).not.toHaveBeenCalled();
+      expect(mockChannel.send).not.toHaveBeenCalled();
+    });
+
+    it('一部の翻訳がINVALID_INPUTエラーでも成功結果があればEmbedを送信する', async () => {
+      const results = [
+        {
+          status: 'success' as const,
+          sourceLang: 'ja',
+          targetLang: 'zh',
+          translatedText: '你好',
+        },
+        {
+          status: 'error' as const,
+          sourceLang: 'ja',
+          targetLang: 'en',
+          errorCode: ErrorCode.INVALID_INPUT,
+          errorMessage: 'Translation failed',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessage, 'こんにちは');
+
+      // メッセージが送信されることを確認
+      expect(mockMessage.reply).toHaveBeenCalledTimes(1);
+    });
+
+    it('全ての結果がINVALID_INPUT以外のエラーの場合はエラーメッセージを送信する', async () => {
+      // channelプロパティを持つモックメッセージを作成
+      const mockMessageWithChannel = {
+        ...mockMessage,
+        channel: mockChannel,
+      } as any;
+
+      const results = [
+        {
+          status: 'error' as const,
+          sourceLang: 'ja',
+          targetLang: 'zh',
+          errorCode: ErrorCode.API_ERROR,
+          errorMessage: 'API service unavailable',
+        },
+        {
+          status: 'error' as const,
+          sourceLang: 'ja',
+          targetLang: 'en',
+          errorCode: ErrorCode.API_ERROR,
+          errorMessage: 'API service unavailable',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageWithChannel, 'こんにちは');
+
+      // エラーメッセージが送信されることを確認
+      expect(mockChannel.send).toHaveBeenCalledWith(
+        '⚠️ 翻訳サービスでエラーが発生しました。しばらくしてから再度お試しください。'
+      );
+      expect(mockMessage.reply).not.toHaveBeenCalled();
+    });
+  });
 });

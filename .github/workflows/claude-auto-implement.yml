@@ -1,0 +1,71 @@
+name: Claude Auto Implementation
+
+on:
+  issues:
+    types: [labeled, assigned]
+  issue_comment:
+    types: [created]
+
+jobs:
+  claude-implement:
+    # "claude-implement"ラベル、@claude[bot]へのアサイン、または@claudeメンションで起動
+    if: |
+      (github.event.label && github.event.label.name == 'claude-implement') ||
+      (github.event.issue.assignee && github.event.issue.assignee.login == 'claude[bot]') ||
+      (github.event.comment && contains(github.event.comment.body, '@claude') && github.event.issue != null)
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          base_branch: develop  # developブランチベースで作業
+          settings: |
+            {
+              "defaultMode": "acceptEdits",
+              "permissions": {
+                "allow": ["*"]
+              }
+            }
+          prompt: |
+            以下のIssueで要求されている機能または修正を実装してください。
+
+            ## Issue情報
+            - Issue番号: #${{ github.event.issue.number }}
+            - タイトル: ${{ github.event.issue.title }}
+            - 本文:
+            ${{ github.event.issue.body }}
+
+            【必須要件】
+            - CLAUDE.mdのプロジェクト憲法とコーディング規約に従うこと
+            - TypeScript + discord.jsを使用
+            - zodを使った型安全な設定管理
+            - 適切なエラーハンドリング（すべての非同期処理に例外処理）
+            - 構造化ログの出力
+            - Poe APIとDiscord APIのレート制限を遵守
+
+            【品質基準】
+            - TypeScriptの型安全性を最大限活用
+            - 単一責任の原則に従った設計
+            - テストコードの作成（重要な機能の場合）
+            - セキュリティ: APIキー・トークンの安全な管理
+
+            【完了時の対応】
+            - 実装完了後、devブランチ向けのPRを作成
+            - PRの説明に実装内容と変更箇所を詳細に記載
+            - テスト方法も記載すること
+          claude_args: |
+            --max-turns 25
+            --model claude-sonnet-4-5
+            --dangerously-skip-permissions

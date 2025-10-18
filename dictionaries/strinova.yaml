@@ -11,6 +11,7 @@ entries:
     aliases:
       zh: [卡拉彼丘, 卡拉]
       ja: [ストリノヴァ]
+      en: [Strinova]
     targets:
       ja: ストリノヴァ
       zh: 卡拉彼丘
@@ -18,79 +19,102 @@ entries:
     category: game_name
     note: ゲーム名の正式名称と略称
 
-  # キャラクター名
-  - id: fuesha
-    aliases:
-      zh: [緋莎]
-    targets:
-      ja: フューシャ
-      zh: 緋莎
-      en: Fuesha
-    category: character
-    note: キャラクター名
-
+  # キャラクター名 (Painting Utopia Security)
   - id: nobunaga
     aliases:
       zh: [信]
-      ja: [信長]
+      ja: [信長, ノブナガ]
+      en: [Nobunaga]
     targets:
       ja: 信長
       zh: 信
       en: Nobunaga
     category: character
-    note: キャラクター名
+    note: Sentinel, DMR
 
   - id: kokona
     aliases:
       zh: [心夏]
+      ja: [ココナ]
+      en: [Kokona]
     targets:
       ja: ココナ
       zh: 心夏
       en: Kokona
     category: character
+    note: Support, SR
 
+  - id: yugiri
+    aliases:
+      zh: [忧雾]
+      ja: [夕霧, ユウギリ]
+      en: [Yugiri]
+    targets:
+      ja: 夕霧
+      zh: 忧雾
+      en: Yugiri
+    category: character
+    note: Controller, AR
+
+  # キャラクター名 (The Scissors)
   - id: eika
     aliases:
       zh: [艾卡]
+      ja: [アイカ]
+      en: [Eika]
     targets:
       ja: アイカ
       zh: 艾卡
       en: Eika
     category: character
+    note: Duelist, SG
 
-  # ゲーム用語
+  # キャラクター名 (Urbino)
+  - id: fuchsia
+    aliases:
+      zh: [緋莎]
+      ja: [フューシャ]
+      en: [Fuchsia]
+    targets:
+      ja: フューシャ
+      zh: 緋莎
+      en: Fuchsia
+    category: character
+    note: Duelist, AR
+
+  - id: celestia
+    aliases:
+      zh: [星绘]
+      ja: [星理恵, セレスティア]
+      en: [Celestia]
+    targets:
+      ja: 星理恵
+      zh: 星绘
+      en: Celestia
+    category: character
+    note: Support, AR
+
+  # ゲーム用語・場所
   - id: scissors
     aliases:
       zh: [剪刀手]
+      ja: [シザーズ]
+      en: [Scissors, The Scissors]
     targets:
       ja: シザーズ
       zh: 剪刀手
-      en: Scissors
+      en: The Scissors
     category: game_term
-    note: ゲーム内用語
-
-  - id: yuugiri
-    aliases:
-      zh: [忧雾]
-    targets:
-      ja: 夕霧
-      zh: 忧雾
-      en: Yuugiri
-    category: game_term
+    note: ファクション名
 
   - id: star_clinic
     aliases:
       zh: [星庇所]
+      ja: [星診療所]
+      en: [Star Clinic]
     targets:
       ja: 星診療所
       zh: 星庇所
+      en: Star Clinic
     category: location
     note: ゲーム内の場所
-
-  - id: hoshie
-    aliases:
-      zh: [星绘]
-    targets:
-      ja: 星理恵
-      zh: 星绘
-    category: character
