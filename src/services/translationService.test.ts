@@ -50,7 +50,7 @@ describe('TranslationService - multiTranslate', () => {
   });
 
   describe('正常系 - 全翻訳成功', () => {
-    it('日本語→中国語+英語の2言語同時翻訳が成功する', async () => {
+    it('日本語→中国語+英語の2言語同時翻訳が成功する（targets指定あり）', async () => {
       const text = 'こんにちは';
       const targets: MultiTranslateTarget[] = [
         { lang: 'zh' },
@@ -89,7 +89,7 @@ describe('TranslationService - multiTranslate', () => {
       expect(mockPoeClient.translate).toHaveBeenCalledTimes(2);
     });
 
-    it('中国語→日本語+英語の2言語同時翻訳が成功する', async () => {
+    it('中国語→日本語+英語の2言語同時翻訳が成功する（targets指定あり）', async () => {
       const text = '你好';
       const targets: MultiTranslateTarget[] = [
         { lang: 'ja' },
@@ -113,6 +113,56 @@ describe('TranslationService - multiTranslate', () => {
       expect(results[1]).toMatchObject({
         sourceLang: 'zh',
         targetLang: 'en',
+      });
+    });
+
+    it('日本語テキストの自動ターゲット選択（中国語+英語）', async () => {
+      const text = 'こんにちは';
+
+      mockLanguageDetector.detect.mockReturnValue('ja');
+      mockPoeClient.translate
+        .mockResolvedValueOnce('你好')
+        .mockResolvedValueOnce('Hello');
+
+      const results = await service.multiTranslate(text); // targetsを指定しない
+
+      expect(results).toHaveLength(2);
+      expect(results[0]).toMatchObject({
+        status: 'success',
+        sourceLang: 'ja',
+        targetLang: 'zh',
+        translatedText: '你好',
+      });
+      expect(results[1]).toMatchObject({
+        status: 'success',
+        sourceLang: 'ja',
+        targetLang: 'en',
+        translatedText: 'Hello',
+      });
+    });
+
+    it('中国語テキストの自動ターゲット選択（日本語+英語）', async () => {
+      const text = '你好';
+
+      mockLanguageDetector.detect.mockReturnValue('zh');
+      mockPoeClient.translate
+        .mockResolvedValueOnce('こんにちは')
+        .mockResolvedValueOnce('Hello');
+
+      const results = await service.multiTranslate(text); // targetsを指定しない
+
+      expect(results).toHaveLength(2);
+      expect(results[0]).toMatchObject({
+        status: 'success',
+        sourceLang: 'zh',
+        targetLang: 'ja',
+        translatedText: 'こんにちは',
+      });
+      expect(results[1]).toMatchObject({
+        status: 'success',
+        sourceLang: 'zh',
+        targetLang: 'en',
+        translatedText: 'Hello',
       });
     });
 

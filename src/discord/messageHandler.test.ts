@@ -91,10 +91,7 @@ describe('MessageHandler', () => {
 
       await handler.handle(mockMessage);
 
-      expect(mockTranslationService.multiTranslate).toHaveBeenCalledWith('こんにちは', [
-        { lang: 'zh' },
-        { lang: 'en' },
-      ]);
+      expect(mockTranslationService.multiTranslate).toHaveBeenCalledWith('こんにちは');
     });
   });
 
@@ -257,10 +254,7 @@ describe('MessageHandler', () => {
 
       await handler.handle(mockMessage);
 
-      expect(mockTranslationService.multiTranslate).toHaveBeenCalledWith('こんにちは', [
-        { lang: 'zh' },
-        { lang: 'en' },
-      ]);
+      expect(mockTranslationService.multiTranslate).toHaveBeenCalledWith('こんにちは');
       expect(mockDispatcher.sendMultiTranslation).toHaveBeenCalledWith(
         multiTranslationResults,
         mockMessage,

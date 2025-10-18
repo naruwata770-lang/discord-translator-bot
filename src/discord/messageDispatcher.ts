@@ -48,9 +48,19 @@ export class MessageDispatcher {
     // 少なくとも1つは成功している必要がある
     const hasSuccess = results.some((r) => r.status === 'success');
     if (!hasSuccess) {
-      // 全て失敗の場合は最初のエラーを送信
+      // 全て失敗の場合
       const firstError = results.find((r) => r.status === 'error');
       if (firstError && firstError.status === 'error') {
+        // INVALID_INPUT（英語など翻訳対象外の言語）の場合は静かにスキップ
+        if (firstError.errorCode === ErrorCode.INVALID_INPUT) {
+          logger.debug('Translation skipped (unsupported language)', {
+            messageId: originalMessage.id,
+            errorCode: firstError.errorCode,
+          });
+          return;
+        }
+
+        // その他のエラーはユーザーに通知
         const errorObj = new TranslationError(
           firstError.errorMessage,
           firstError.errorCode
