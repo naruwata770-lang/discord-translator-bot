@@ -113,11 +113,15 @@ export class MessageDispatcher {
   ): EmbedBuilder {
     const flag = result.sourceLang === 'ja' ? '🇯🇵→🇨🇳' : '🇨🇳→🇯🇵';
 
+    // サーバープロフィールを優先、DMの場合はグローバルプロフィールにフォールバック
+    const displayName = originalMessage.member?.displayName ?? originalMessage.author.username;
+    const avatarURL = originalMessage.member?.displayAvatarURL() ?? originalMessage.author.displayAvatarURL();
+
     return new EmbedBuilder()
       .setColor(0x5865f2) // Discordブルー
       .setAuthor({
-        name: originalMessage.author.username,
-        iconURL: originalMessage.author.displayAvatarURL(),
+        name: displayName,
+        iconURL: avatarURL,
       })
       .setDescription(result.translatedText)
       .setFooter({
