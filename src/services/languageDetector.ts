@@ -11,6 +11,10 @@ export class LanguageDetector {
     // 中国語固有の句読点
     const hasChinesePunctuation = /[，。？！：；""''【】（）]/.test(text);
 
+    // 簡体字（中国語特有の簡略化された漢字）
+    // 例: 坏(壊)、弄(弄)、彻(徹)、列(列)など
+    const hasSimplifiedChinese = /[坏弄彻过这国为们时会务动产电实际关现发经开|啊哦吗呢]/.test(text);
+
     // ひらがな・カタカナがあれば日本語
     if (hasHiragana || hasKatakana) {
       return 'ja';
@@ -21,6 +25,11 @@ export class LanguageDetector {
       return 'ja';
     }
 
+    // 簡体字があれば中国語
+    if (hasSimplifiedChinese) {
+      return 'zh';
+    }
+
     // 中国語句読点があれば中国語
     if (hasChinesePunctuation) {
       return 'zh';
@@ -28,16 +37,28 @@ export class LanguageDetector {
 
     // 漢字のみの場合
     if (hasKanji) {
-      // 常用漢字の頻度で判定（日本語に多い漢字）
-      const jpCommonKanji = /[人日本語一二三時間会社]/;
-      const jpKanjiCount = (text.match(jpCommonKanji) || []).length;
+      // 日本語特有の漢字組み合わせパターン
+      // 「の」「を」「は」「が」などの助詞は既にひらがなチェックで除外済み
+      // ここでは送り仮名なしで日本語と判断できる特徴的な単語を検出
+      const jpSpecificPattern = /[日本語時間会社今明後東西南北]/;
+      const jpPatternMatch = text.match(jpSpecificPattern);
 
-      // 日本語でよく使われる漢字が多ければ日本語と判定
-      if (jpKanjiCount > 0) {
+      // 中国語特有の単語パターン
+      const zhSpecificPattern = /[要用再了|吗呢啊]/;
+      const zhPatternMatch = text.match(zhSpecificPattern);
+
+      // 中国語パターンが優先
+      if (zhPatternMatch && zhPatternMatch.length > 0) {
+        return 'zh';
+      }
+
+      // 日本語パターンがあり、中国語パターンがない場合
+      if (jpPatternMatch && jpPatternMatch.length > 0) {
         return 'ja';
       }
 
-      // それ以外は中国語と判定
+      // どちらのパターンもない場合、デフォルトで中国語
+      // （簡体字圏の方が漢字のみで書く傾向が強いため）
       return 'zh';
     }
 
