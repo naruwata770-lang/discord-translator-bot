@@ -24,7 +24,9 @@ describe('MessageHandler', () => {
 
     mockCommandParser.parse = jest.fn();
     mockTranslationService.translate = jest.fn();
+    mockTranslationService.multiTranslate = jest.fn();
     mockDispatcher.sendTranslation = jest.fn().mockResolvedValue(undefined);
+    mockDispatcher.sendMultiTranslation = jest.fn().mockResolvedValue(undefined);
     mockDispatcher.sendCommandResponse = jest.fn().mockResolvedValue(undefined);
     mockDispatcher.sendError = jest.fn().mockResolvedValue(undefined);
 
@@ -72,15 +74,24 @@ describe('MessageHandler', () => {
 
     it('対象チャンネルのメッセージは処理する', async () => {
       mockCommandParser.parse.mockReturnValue(null);
-      mockTranslationService.translate.mockResolvedValue({
-        translatedText: '你好',
-        sourceLang: 'ja',
-        targetLang: 'zh',
-      });
+      mockTranslationService.multiTranslate.mockResolvedValue([
+        {
+          status: 'success',
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+        {
+          status: 'success',
+          translatedText: 'Hello',
+          sourceLang: 'ja',
+          targetLang: 'en',
+        },
+      ]);
 
       await handler.handle(mockMessage);
 
-      expect(mockTranslationService.translate).toHaveBeenCalledWith('こんにちは');
+      expect(mockTranslationService.multiTranslate).toHaveBeenCalledWith('こんにちは');
     });
   });
 
@@ -154,8 +165,8 @@ describe('MessageHandler', () => {
       mockCommandParser.parse.mockReturnValue(null);
       await handler.handle(mockMessage);
 
-      // translate は OFF後に呼ばれない（OFFコマンド時も呼ばれない）
-      expect(mockTranslationService.translate).not.toHaveBeenCalled();
+      // multiTranslate は OFF後に呼ばれない（OFFコマンド時も呼ばれない）
+      expect(mockTranslationService.multiTranslate).not.toHaveBeenCalled();
     });
 
     it('空メッセージはスキップする', async () => {
@@ -163,7 +174,7 @@ describe('MessageHandler', () => {
 
       await handler.handle(mockMessage);
 
-      expect(mockTranslationService.translate).not.toHaveBeenCalled();
+      expect(mockTranslationService.multiTranslate).not.toHaveBeenCalled();
     });
 
     it('1文字のメッセージはスキップする', async () => {
@@ -171,7 +182,7 @@ describe('MessageHandler', () => {
 
       await handler.handle(mockMessage);
 
-      expect(mockTranslationService.translate).not.toHaveBeenCalled();
+      expect(mockTranslationService.multiTranslate).not.toHaveBeenCalled();
     });
 
     it('URLのみのメッセージはスキップする', async () => {
@@ -179,7 +190,7 @@ describe('MessageHandler', () => {
 
       await handler.handle(mockMessage);
 
-      expect(mockTranslationService.translate).not.toHaveBeenCalled();
+      expect(mockTranslationService.multiTranslate).not.toHaveBeenCalled();
     });
 
     it('絵文字のみのメッセージはスキップする', async () => {
@@ -187,7 +198,7 @@ describe('MessageHandler', () => {
 
       await handler.handle(mockMessage);
 
-      expect(mockTranslationService.translate).not.toHaveBeenCalled();
+      expect(mockTranslationService.multiTranslate).not.toHaveBeenCalled();
     });
 
     it('コマンド(!で始まる)はスキップする', async () => {
@@ -195,7 +206,7 @@ describe('MessageHandler', () => {
 
       await handler.handle(mockMessage);
 
-      expect(mockTranslationService.translate).not.toHaveBeenCalled();
+      expect(mockTranslationService.multiTranslate).not.toHaveBeenCalled();
     });
 
     it('添付ファイルのみ(テキストなし)はスキップする', async () => {
@@ -206,7 +217,7 @@ describe('MessageHandler', () => {
 
       await handler.handle(mockMessage);
 
-      expect(mockTranslationService.translate).not.toHaveBeenCalled();
+      expect(mockTranslationService.multiTranslate).not.toHaveBeenCalled();
     });
 
     it('Embedのみ(テキストなし)はスキップする', async () => {
@@ -215,7 +226,7 @@ describe('MessageHandler', () => {
 
       await handler.handle(mockMessage);
 
-      expect(mockTranslationService.translate).not.toHaveBeenCalled();
+      expect(mockTranslationService.multiTranslate).not.toHaveBeenCalled();
     });
   });
 
@@ -225,25 +236,35 @@ describe('MessageHandler', () => {
     });
 
     it('通常のメッセージを翻訳して送信する', async () => {
-      const translationResult: TranslationResult = {
-        translatedText: '你好',
-        sourceLang: 'ja',
-        targetLang: 'zh',
-      };
-      mockTranslationService.translate.mockResolvedValue(translationResult);
+      const multiTranslationResults = [
+        {
+          status: 'success' as const,
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+        {
+          status: 'success' as const,
+          translatedText: 'Hello',
+          sourceLang: 'ja',
+          targetLang: 'en',
+        },
+      ];
+      mockTranslationService.multiTranslate.mockResolvedValue(multiTranslationResults);
 
       await handler.handle(mockMessage);
 
-      expect(mockTranslationService.translate).toHaveBeenCalledWith('こんにちは');
-      expect(mockDispatcher.sendTranslation).toHaveBeenCalledWith(
-        translationResult,
-        mockMessage
+      expect(mockTranslationService.multiTranslate).toHaveBeenCalledWith('こんにちは');
+      expect(mockDispatcher.sendMultiTranslation).toHaveBeenCalledWith(
+        multiTranslationResults,
+        mockMessage,
+        'こんにちは'
       );
     });
 
     it('翻訳エラーが発生した場合はエラーメッセージを送信する', async () => {
       const error = new Error('Translation failed');
-      mockTranslationService.translate.mockRejectedValue(error);
+      mockTranslationService.multiTranslate.mockRejectedValue(error);
 
       await handler.handle(mockMessage);
 

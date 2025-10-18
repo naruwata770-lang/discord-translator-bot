@@ -141,14 +141,25 @@ export class MessageHandler {
         userId: message.author.id,
       });
 
-      const result = await this.translationService.translate(message.content);
+      // 2言語同時翻訳を実行
+      // TranslationService.multiTranslateが内部で言語を検出し、
+      // 日本語 → 中国語 + 英語
+      // 中国語 → 日本語 + 英語
+      // に自動変換する
+      const results = await this.translationService.multiTranslate(
+        message.content
+      );
 
-      await this.dispatcher.sendTranslation(result, message);
+      await this.dispatcher.sendMultiTranslation(
+        results,
+        message,
+        message.content
+      );
 
-      logger.info('Translation completed', {
+      logger.info('Multi-translation completed', {
         messageId: message.id,
-        sourceLang: result.sourceLang,
-        targetLang: result.targetLang,
+        sourceLang: results[0]?.sourceLang,
+        targetCount: results.filter((r) => r.status === 'success').length,
       });
     } catch (error) {
       // INVALID_INPUTエラー（英語など翻訳対象外の言語）の場合は静かにスキップ

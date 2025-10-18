@@ -5,7 +5,11 @@ import { DictionaryService } from './dictionaryService';
 import { TranslationError } from '../utils/errors';
 import { UnsupportedLanguageError, ValidationError } from './errors';
 import { ErrorCode, TranslationResult } from '../types';
-import { LanguageCode } from '../types/dictionary';
+import { LanguageCode, DictionaryMatch } from '../types/dictionary';
+import {
+  MultiTranslateTarget,
+  MultiTranslationResult,
+} from '../types/multiTranslation';
 import logger from '../utils/logger';
 
 export interface TranslationOptions {
@@ -194,5 +198,101 @@ export class TranslationService {
     }
 
     return null;
+  }
+
+  /**
+   * 複数言語への同時翻訳
+   * @param text 翻訳対象テキスト
+   * @param targets 翻訳先言語のリスト（省略時は自動決定: 日本語→中国語+英語、中国語→日本語+英語）
+   * @returns 各言語への翻訳結果（成功/失敗を含む）
+   */
+  async multiTranslate(
+    text: string,
+    targets?: MultiTranslateTarget[]
+  ): Promise<MultiTranslationResult[]> {
+    // 1. 元言語を検出
+    const sourceLang = this.languageDetector.detect(text);
+
+    // 言語が不明な場合は全てエラーとして返す
+    if (sourceLang === 'unknown') {
+      // targetsが指定されていない場合はデフォルトのターゲットを使用
+      const defaultTargets = targets || [{ lang: 'zh' }, { lang: 'en' }];
+      return defaultTargets.map((target) => ({
+        status: 'error' as const,
+        sourceLang: 'unknown',
+        targetLang: target.lang,
+        errorCode: ErrorCode.INVALID_INPUT,
+        errorMessage: 'Language could not be detected',
+      }));
+    }
+
+    // 2. targetsが指定されていない場合は、ソース言語に基づいて自動決定
+    if (!targets) {
+      if (sourceLang === 'zh') {
+        // 中国語 → 日本語 + 英語
+        targets = [{ lang: 'ja' }, { lang: 'en' }];
+      } else {
+        // 日本語（デフォルト） → 中国語 + 英語
+        targets = [{ lang: 'zh' }, { lang: 'en' }];
+      }
+    }
+
+    // 3. 各ターゲット言語に対して並列翻訳
+    const promises = targets.map(async (target) => {
+      try {
+        // 3.1 辞書マッチング
+        let glossaryHints: DictionaryMatch[] | undefined;
+        if (this.dictionaryService) {
+          const matches = this.dictionaryService.findMatches(
+            text,
+            sourceLang as LanguageCode,
+            target.lang
+          );
+          if (matches.length > 0) {
+            glossaryHints = matches;
+            logger.debug('Dictionary matches found for multiTranslate', {
+              targetLang: target.lang,
+              count: matches.length,
+              terms: matches.map((m) => m.matchedTerm),
+            });
+          }
+        }
+
+        // 3.2 翻訳実行（既存のtranslateメソッドを利用してリトライ機能を活用）
+        const result = await this.translate(text, {
+          sourceLang,
+          targetLang: target.lang,
+        });
+
+        // 3.3 成功結果を返す
+        return {
+          status: 'success' as const,
+          sourceLang,
+          targetLang: target.lang,
+          translatedText: result.translatedText,
+          glossaryHints,
+        };
+      } catch (error) {
+        // 3.4 部分的な失敗を許容してエラー結果を返す
+        logger.warn('Translation failed for one target in multiTranslate', {
+          targetLang: target.lang,
+          error: error instanceof Error ? error.message : String(error),
+        });
+
+        return {
+          status: 'error' as const,
+          sourceLang,
+          targetLang: target.lang,
+          errorCode:
+            error instanceof TranslationError
+              ? error.code
+              : ErrorCode.API_ERROR,
+          errorMessage:
+            error instanceof Error ? error.message : String(error),
+        };
+      }
+    });
+
+    return Promise.all(promises);
   }
 }

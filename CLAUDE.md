@@ -79,17 +79,47 @@ MCPツールとして、Claude Code内から直接呼び出し可能です。
 - `mcp__codex__codex`呼び出し時は**モデル指定をしない**（デフォルト設定を使用）
 - `config`パラメータで`model`を指定すると応答が返ってこない
 
+### Claude Code Action (GitHub統合)
+PRを作成すると、GitHub上の別のClaude Codeインスタンスが自動レビューを実施します。
+
+#### PR自動レビューについて
+実装完了後、PRを作成すると:
+- GitHub Actionsで別のClaude Codeが起動
+- 本プロジェクトの品質基準（CLAUDE.md）に基づいてレビュー
+- TypeScript型安全性、エラーハンドリング、セキュリティなどをチェック
+- コメントで指摘・改善提案を受け取る
+
+#### レビュー後の対応
+- レビューコメントの指摘事項を確認
+- 修正が必要な場合は対応してコミット
+- GitHub上のClaudeからの提案を真摯に受け止める
+- 追加の質問があればPRコメントで`@claude`メンション可能
+
+#### ワークフロー
+- `.github/workflows/claude-auto-review.yml`: PR自動レビュー設定
+- 詳細: [docs/CLAUDE_CODE_ACTION_GUIDE.md](/docs/CLAUDE_CODE_ACTION_GUIDE.md)
+
 #### レビュープロセス（重要）
-**実装後、mainブランチへのマージ前に必ずCodexレビューを実施すること**
+**実装後、mainブランチへのマージ前に必ずレビューを実施すること**
 
 1. **実装完了後、コミット前**
    - 変更内容をCodexに提示してレビュー依頼
    - 修正指摘があれば対応してから再レビュー
 
-2. **レビュー承認後**
+2. **レビュー承認後、PRを作成**
    - 指摘事項を全て修正
    - テストが通ることを確認
-   - コミット・プッシュ
+   - コミット・プッシュしてPR作成
+
+3. **GitHub上のClaude Code自動レビュー**
+   - PRを作成すると自動的にレビューが実施される
+   - レビューコメントの指摘を確認
+   - 必要に応じて追加修正
+
+4. **最終確認後マージ**
+   - すべての指摘に対応完了
+   - テスト通過を確認
+   - マージ実行
 
 ## ドキュメント構成
 
@@ -100,6 +130,7 @@ MCPツールとして、Claude Code内から直接呼び出し可能です。
   - `TECHNICAL_SPECIFICATION.md`: 技術仕様書
   - `IMPLEMENTATION_GUIDE.md`: 実装ガイド
   - `DEPLOYMENT_GUIDE.md`: デプロイ手順書
+  - `CLAUDE_CODE_ACTION_GUIDE.md`: Claude Code Action使い方ガイド
 
 ## 開発フェーズ
 
