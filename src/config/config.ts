@@ -62,6 +62,10 @@ export class ConfigStore {
   get nodeEnv(): string {
     return this.config.NODE_ENV;
   }
+
+  get useAiDetection(): boolean {
+    return this.config.USE_AI_DETECTION;
+  }
 }
 
 export default ConfigStore.getInstance();

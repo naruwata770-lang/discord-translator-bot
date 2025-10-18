@@ -261,4 +261,231 @@ describe('PoeApiClient', () => {
       expect(global.fetch).toHaveBeenCalledTimes(3);
     });
   });
+
+  describe('translateWithAutoDetect', () => {
+    it('should translate Japanese to Chinese', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: '你好',
+            },
+          },
+        ],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      const result = await client.translateWithAutoDetect('こんにちは');
+
+      expect(result).toBe('你好');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      const callArgs = (global.fetch as jest.Mock).mock.calls[0];
+      const body = JSON.parse(callArgs[1].body);
+      expect(body.temperature).toBe(0);
+      expect(body.stop).toBeUndefined();
+    });
+
+    it('should translate Chinese to Japanese', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'こんにちは' } }],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      const result = await client.translateWithAutoDetect('你好');
+
+      expect(result).toBe('こんにちは');
+    });
+
+    it('should throw UnsupportedLanguageError for English', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'UNSUPPORTED_LANGUAGE' } }],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      await expect(client.translateWithAutoDetect('Hello')).rejects.toThrow(
+        'Language not supported by AI detection'
+      );
+    });
+
+    it('should skip filler lines and extract translation', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: 'Sure, here is the translation:\n你好',
+            },
+          },
+        ],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      const result = await client.translateWithAutoDetect('こんにちは');
+
+      expect(result).toBe('你好');
+    });
+
+    it('should handle same-line filler and translation', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'Translation: 你好' } }],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      const result = await client.translateWithAutoDetect('こんにちは');
+
+      expect(result).toBe('你好');
+    });
+
+    it('should handle same-line filler variants', async () => {
+      // Test "Sure: 你好"
+      const mockResponse1 = {
+        choices: [{ message: { content: 'Sure: 你好' } }],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse1,
+      });
+
+      const result1 = await client.translateWithAutoDetect('こんにちは');
+      expect(result1).toBe('你好');
+
+      // Test "OK: こんにちは"
+      const mockResponse2 = {
+        choices: [{ message: { content: 'OK: こんにちは' } }],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse2,
+      });
+
+      const result2 = await client.translateWithAutoDetect('你好');
+      expect(result2).toBe('こんにちは');
+    });
+
+    it('should handle complex filler chains', async () => {
+      // Test "This is the translation: 你好"
+      const mockResponse1 = {
+        choices: [{ message: { content: 'This is the translation: 你好' } }],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse1,
+      });
+
+      const result1 = await client.translateWithAutoDetect('こんにちは');
+      expect(result1).toBe('你好');
+
+      // Test "Okay, here is the result: こんにちは"
+      const mockResponse2 = {
+        choices: [
+          { message: { content: 'Okay, here is the result: こんにちは' } },
+        ],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse2,
+      });
+
+      const result2 = await client.translateWithAutoDetect('你好');
+      expect(result2).toBe('こんにちは');
+    });
+
+    it('should throw ValidationError for English-only response', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'This is just English text' } }],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      await expect(
+        client.translateWithAutoDetect('こんにちは')
+      ).rejects.toThrow('AI returned non-Japanese/Chinese text');
+    });
+
+    it('should throw ValidationError for empty response', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: '   \n\n   ' } }],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      await expect(
+        client.translateWithAutoDetect('こんにちは')
+      ).rejects.toThrow('AI returned empty translation');
+    });
+
+    it('should handle timeout', async () => {
+      (global.fetch as jest.Mock).mockRejectedValueOnce(
+        new Error('Request timeout')
+      );
+
+      await expect(
+        client.translateWithAutoDetect('こんにちは')
+      ).rejects.toThrow('Network error during AI detection');
+    });
+
+    it('should handle multi-paragraph translation', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: '你好\n\n今天天气很好',
+            },
+          },
+        ],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      const result = await client.translateWithAutoDetect(
+        'こんにちは\n\n今日はいい天気です'
+      );
+
+      expect(result).toBe('你好\n\n今天天气很好');
+    });
+  });
 });
