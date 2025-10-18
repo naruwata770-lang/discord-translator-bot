@@ -45,7 +45,6 @@ export const envSchema = z.object({
   USE_AI_DETECTION: z
     .string()
     .optional()
-    .transform((val) => val === 'true')
     .default('true')
     .transform((val) => val === 'true'),
 });
