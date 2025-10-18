@@ -1,9 +1,11 @@
 import { PoeApiClient } from './poeApiClient';
 import { LanguageDetector } from './languageDetector';
 import { RateLimiter } from './rateLimiter';
+import { DictionaryService } from './dictionaryService';
 import { TranslationError } from '../utils/errors';
 import { UnsupportedLanguageError, ValidationError } from './errors';
 import { ErrorCode, TranslationResult } from '../types';
+import { LanguageCode } from '../types/dictionary';
 import logger from '../utils/logger';
 
 export interface TranslationOptions {
@@ -16,7 +18,8 @@ export class TranslationService {
     private poeClient: PoeApiClient,
     private languageDetector: LanguageDetector,
     private rateLimiter: RateLimiter,
-    private useAiDetection: boolean = false
+    private useAiDetection: boolean = false,
+    private dictionaryService?: DictionaryService
   ) {}
 
   async translate(
@@ -31,8 +34,31 @@ export class TranslationService {
       if (this.useAiDetection && !options?.sourceLang) {
         try {
           const startTime = Date.now();
+
+          // 辞書マッチングを試みる
+          let dictionaryHint: string | undefined;
+          if (this.dictionaryService) {
+            // 言語を簡易検出（日本語or中国語のみ）
+            const detectedLang = this.detectSimpleLanguage(text);
+            if (detectedLang) {
+              const targetLang = detectedLang === 'ja' ? 'zh' : 'ja';
+              const matches = this.dictionaryService.findMatches(
+                text,
+                detectedLang,
+                targetLang as LanguageCode
+              );
+              if (matches.length > 0) {
+                dictionaryHint = this.dictionaryService.generatePromptHint(matches);
+                logger.debug('Dictionary matches found', {
+                  count: matches.length,
+                  terms: matches.map((m) => m.matchedTerm),
+                });
+              }
+            }
+          }
+
           const translatedText =
-            await this.poeClient.translateWithAutoDetect(text);
+            await this.poeClient.translateWithAutoDetect(text, dictionaryHint);
           const responseTime = Date.now() - startTime;
 
           logger.info('AI detection succeeded', {
@@ -133,5 +159,40 @@ export class TranslationService {
       // 英語など、その他の言語は日本語に翻訳
       return 'ja';
     }
+  }
+
+  /**
+   * 簡易言語検出（辞書マッチング用）
+   * @param text テキスト
+   * @returns 'ja' | 'zh' | null
+   */
+  private detectSimpleLanguage(text: string): LanguageCode | null {
+    // ひらがな・カタカナがあれば確実に日本語
+    if (/[\u3040-\u309f\u30a0-\u30ff]/.test(text)) {
+      return 'ja';
+    }
+
+    // 日本語句読点があれば日本語
+    if (/[。、]/.test(text)) {
+      return 'ja';
+    }
+
+    // 中国語句読点があれば中国語
+    if (/[，。！？；：]/.test(text)) {
+      return 'zh';
+    }
+
+    // 漢字のみの場合は既存のLanguageDetectorを使用
+    if (/[\u4e00-\u9fff]/.test(text)) {
+      const detected = this.languageDetector.detect(text);
+      if (detected === 'ja' || detected === 'zh') {
+        return detected;
+      }
+      // LanguageDetectorでも判定できない場合は日本語を優先
+      // （日中友達との会話なので、曖昧な場合は日本語が多いと想定）
+      return 'ja';
+    }
+
+    return null;
   }
 }
