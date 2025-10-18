@@ -11,23 +11,24 @@ export class LanguageDetector {
     // 中国語固有の句読点
     const hasChinesePunctuation = /[，。？！：；""''【】（）]/.test(text);
 
-    // 簡体字（中国語特有の簡略化された漢字）
-    // 例: 坏(壊)、弄(弄)、彻(徹)、列(列)など
-    const hasSimplifiedChinese = /[坏弄彻过这国为们时会务动产电实际关现发经开|啊哦吗呢]/.test(text);
+    // 簡体字（中国語特有の簡略化された漢字で、日本語では使われないもの）
+    // 坏(壊)、弄(いじる)、彻(徹)、过(過)、这(這)、为(為)、们(們)、务(務)、产(產)、实(實)、际(際)、关(關)、现(現)、发(發)、经(經)など
+    // 注意：「国」「時」「会」「動」「電」「開」などは日本語でも使われるため除外
+    const hasSimplifiedChinese = /[坏弄彻过这为们务产实际关现发经啊哦吗呢]/.test(text);
 
     // ひらがな・カタカナがあれば日本語
     if (hasHiragana || hasKatakana) {
       return 'ja';
     }
 
+    // 簡体字があれば中国語（日本語句読点より優先）
+    if (hasSimplifiedChinese) {
+      return 'zh';
+    }
+
     // 日本語句読点があれば日本語（漢字のみでも判定可能）
     if (hasJapanesePunctuation) {
       return 'ja';
-    }
-
-    // 簡体字があれば中国語
-    if (hasSimplifiedChinese) {
-      return 'zh';
     }
 
     // 中国語句読点があれば中国語

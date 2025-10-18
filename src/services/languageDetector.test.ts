@@ -56,6 +56,11 @@ describe('LanguageDetector', () => {
       expect(detector.detect('我要学习')).toBe('zh');
       expect(detector.detect('再来一次')).toBe('zh');
     });
+
+    it('簡体字と日本語句読点が混在する場合は簡体字を優先して中国語と判定', () => {
+      expect(detector.detect('哦哦哦 要坏掉了 再、再多一点')).toBe('zh');
+      expect(detector.detect('弄坏了、真的')).toBe('zh');
+    });
   });
 
   describe('エッジケース', () => {
