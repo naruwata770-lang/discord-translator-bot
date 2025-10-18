@@ -10,6 +10,21 @@ export interface TranslationResult {
   targetLang: string;
 }
 
+export type MultiTranslationResult =
+  | {
+      status: 'success';
+      translatedText: string;
+      sourceLang: string;
+      targetLang: string;
+    }
+  | {
+      status: 'error';
+      errorCode: ErrorCode;
+      errorMessage: string;
+      sourceLang: string;
+      targetLang: string;
+    };
+
 export interface Command {
   type: 'auto_on' | 'auto_off' | 'auto_status';
 }
