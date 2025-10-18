@@ -1,0 +1,87 @@
+name: Claude Auto Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    # mainブランチへのPRは特に厳格にレビュー
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  claude-review:
+    # PRの自動レビュー
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            このPRを詳細にレビューしてください。
+
+            【レビュー観点】
+            以下の項目を重点的にチェック:
+
+            1. **コーディング規約（CLAUDE.md準拠）**
+               - TypeScriptの型安全性（any型の不適切な使用がないか）
+               - zodによる設定管理とバリデーション
+               - 命名規則の一貫性
+
+            2. **エラーハンドリング**
+               - すべての非同期処理に適切な例外処理があるか
+               - ユーザーフレンドリーなエラーメッセージ
+               - エラー時のログ出力
+
+            3. **API制限の遵守**
+               - Poe APIのレート制限対策
+               - Discord APIのレート制限対策
+               - リトライ処理の実装
+
+            4. **セキュリティ**
+               - APIキー・トークンがハードコードされていないか
+               - 環境変数の適切な使用
+               - 入力値のバリデーション
+
+            5. **パフォーマンス**
+               - 不要な非同期処理の連鎖
+               - メモリリークの可能性
+
+            6. **テストとドキュメント**
+               - 重要な機能のテストコード
+               - コメントの適切性
+               - README/ドキュメントの更新
+
+            ${{ github.base_ref == 'main' && '【重要】このPRはmainブランチへのマージです。本番リリース前の最終チェックとして、特に慎重にレビューしてください。' || '' }}
+
+            【アウトプット形式】
+            - 問題がある場合: 具体的な修正提案とコード例を提示
+            - 良い実装: 評価ポイントを明記
+            - 改善提案: オプショナルな改善案も提示
+          claude_args: |
+            --max-turns 10
+            --model claude-sonnet-4-5
+
+  claude-respond:
+    # レビューコメントへの対応
+    if: |
+      github.event_name == 'pull_request_review_comment' &&
+      contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --max-turns 10
+            --model claude-sonnet-4-5
