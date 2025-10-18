@@ -33,7 +33,10 @@ jobs:
           base_branch: develop  # developブランチベースで作業
           settings: |
             {
-              "autoAcceptPermissions": true
+              "defaultMode": "acceptEdits",
+              "permissions": {
+                "allow": ["*"]
+              }
             }
           prompt: |
             以下のIssueで要求されている機能または修正を実装してください。
