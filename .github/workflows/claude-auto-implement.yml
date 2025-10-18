@@ -20,16 +20,17 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: dev
+          ref: develop
 
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          base_branch: dev  # devブランチベースで作業
+          base_branch: develop  # developブランチベースで作業
           prompt: |
             このIssueで要求されている機能または修正を実装してください。
 
