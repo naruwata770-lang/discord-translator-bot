@@ -123,7 +123,9 @@ export class MessageDispatcher {
     for (const result of results) {
       if (result.status === 'success') {
         const flag = this.getLanguageFlag(result.targetLang);
-        const fieldValue = this.truncateField(result.translatedText, 1024);
+        // CJKテキスト（中国語・日本語）の改行対策: ゼロ幅スペース追加→切り詰め
+        const withBreaks = this.addWordBreakOpportunities(result.translatedText, result.targetLang);
+        const fieldValue = this.truncateField(withBreaks, 1024);
         embed.addFields({
           name: `${flag} ${this.getLanguageName(result.targetLang)}`,
           value: fieldValue,
@@ -171,6 +173,9 @@ export class MessageDispatcher {
 
         // メンション再通知を防ぐため、cleanContentを使用
         const cleanTranslation = this.sanitizeMentions(result.translatedText);
+        // CJKテキスト（中国語・日本語）の改行対策: ゼロ幅スペース追加→切り詰め
+        const withBreaks = this.addWordBreakOpportunities(cleanTranslation, result.targetLang);
+        const descriptionWithBreaks = this.truncateField(withBreaks, 4096);
 
         const embed = new EmbedBuilder()
           .setColor(0x5865f2)
@@ -178,7 +183,7 @@ export class MessageDispatcher {
             name: displayName,
             iconURL: avatarURL,
           })
-          .setDescription(this.truncateField(cleanTranslation, 4096))
+          .setDescription(descriptionWithBreaks)
           .setFooter({
             text: `${sourceFlag}→${flag} 自動翻訳`,
           })
@@ -260,6 +265,33 @@ export class MessageDispatcher {
       return text + '\n' + padding;
     }
     return text;
+  }
+
+  /**
+   * CJKテキスト（中国語・日本語）にゼロ幅スペースを挿入して改行機会を提供
+   * 英語など他の言語はそのまま返す
+   *
+   * CJKテキストはスペースがないため、Discord mobileで改行されずに途切れる問題がある。
+   * ゼロ幅スペース（\u200B）を適切な間隔で挿入することで、自然な改行を可能にする。
+   *
+   * 注意: この関数はtruncateFieldの**前**に呼び出すこと。
+   * ゼロ幅スペース追加により文字数が増えるため、追加後に切り詰める必要がある。
+   *
+   * @param text テキスト（truncate前のもの）
+   * @param lang 言語コード
+   * @returns 改行機会が追加されたテキスト
+   */
+  private addWordBreakOpportunities(text: string, lang: string): string {
+    // 中国語・日本語の場合のみ処理
+    if (lang !== 'zh' && lang !== 'ja') {
+      return text;
+    }
+
+    // 15文字ごとにゼロ幅スペースを挿入
+    // （モバイル画面幅に合わせた適切な間隔）
+    const interval = 15;
+    const regex = new RegExp(`(.{${interval}})`, 'g');
+    return text.replace(regex, '$1\u200B');
   }
 
   /**

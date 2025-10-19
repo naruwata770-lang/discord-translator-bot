@@ -445,4 +445,88 @@ describe('MessageDispatcher', () => {
       expect(mockMessage.reply).not.toHaveBeenCalled();
     });
   });
+
+  describe('CJKテキストの改行対策', () => {
+    it('中国語フィールドにゼロ幅スペースが挿入されて改行機会が提供される', async () => {
+      const longChineseText = '会議がようやく終わりかけた頃、友達から突然お茶の誘いが届いた。';
+      const mockMessageForCJK = {
+        ...mockMessage,
+        cleanContent: 'こんにちは',
+      } as any;
+
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: longChineseText,
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageForCJK, 'こんにちは');
+
+      const replyArgs = (mockMessageForCJK.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+      const field = embed.data.fields[0];
+
+      // ゼロ幅スペース（\u200B）が含まれていることを確認
+      expect(field.value).toContain('\u200B');
+      // 元のテキストも含まれていることを確認
+      expect(field.value).toContain('会議がようやく終わりかけた頃');
+    });
+
+    it('日本語フィールドにもゼロ幅スペースが挿入される', async () => {
+      const longJapaneseText = 'ついに雨が止み、みんなのいた教室で、笑い声が戻ってきた。';
+      const mockMessageForCJK = {
+        ...mockMessage,
+        cleanContent: '你好',
+      } as any;
+
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: longJapaneseText,
+          sourceLang: 'zh',
+          targetLang: 'ja',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageForCJK, '你好');
+
+      const replyArgs = (mockMessageForCJK.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+      const field = embed.data.fields[0];
+
+      // ゼロ幅スペース（\u200B）が含まれていることを確認
+      expect(field.value).toContain('\u200B');
+    });
+
+    it('英語フィールドにはゼロ幅スペースが挿入されない', async () => {
+      const englishText = 'At last, the rain stopped, and in the park where a fleeting calm returned, a cat lay napping on a bench.';
+      const mockMessageForEN = {
+        ...mockMessage,
+        cleanContent: 'こんにちは',
+      } as any;
+
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: englishText,
+          sourceLang: 'ja',
+          targetLang: 'en',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageForEN, 'こんにちは');
+
+      const replyArgs = (mockMessageForEN.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+      const field = embed.data.fields[0];
+
+      // ゼロ幅スペースが含まれていないことを確認
+      expect(field.value).not.toContain('\u200B');
+      // 元のテキストは含まれている
+      expect(field.value).toBe(englishText);
+    });
+  });
 });
