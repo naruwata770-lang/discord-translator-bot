@@ -52,7 +52,8 @@ describe('MessageDispatcher', () => {
       // Embedの内容を確認
       expect(embed.data.author.name).toBe('TestUser');
       expect(embed.data.author.icon_url).toBe('https://avatar.url');
-      expect(embed.data.description).toBe('こんにちは');
+      // Descriptionには元のメッセージ + モバイル幅確保用のパディングが含まれる
+      expect(embed.data.description).toContain('こんにちは');
       expect(embed.data.footer.text).toContain('自動翻訳');
       expect(embed.data.timestamp).toBe('2025-10-17T12:00:00.000Z');
 
@@ -253,8 +254,8 @@ describe('MessageDispatcher', () => {
       const replyArgs = (mockMessageWithClean.reply as jest.Mock).mock.calls[0][0];
       const embed = replyArgs.embeds[0];
 
-      // descriptionに元のメッセージが設定されていることを確認
-      expect(embed.data.description).toBe('こんにちは');
+      // descriptionに元のメッセージ + モバイル幅確保用のパディングが含まれることを確認
+      expect(embed.data.description).toContain('こんにちは');
     });
 
     it('メンションを含むメッセージではcleanContentを使用して再通知を防ぐ', async () => {
@@ -278,8 +279,8 @@ describe('MessageDispatcher', () => {
       const replyArgs = (mockMessageWithMention.reply as jest.Mock).mock.calls[0][0];
       const embed = replyArgs.embeds[0];
 
-      // descriptionにcleanContentが使用されていることを確認
-      expect(embed.data.description).toBe('こんにちは @UserName');
+      // descriptionにcleanContentが使用されていることを確認（パディング付き）
+      expect(embed.data.description).toContain('こんにちは @UserName');
       // メンション記法が含まれていないことを確認
       expect(embed.data.description).not.toContain('<@');
     });
@@ -357,8 +358,8 @@ describe('MessageDispatcher', () => {
       const replyArgs = (mockMessageNoClean.reply as jest.Mock).mock.calls[0][0];
       const embed = replyArgs.embeds[0];
 
-      // originalTextが使用されていることを確認
-      expect(embed.data.description).toBe('こんにちは');
+      // originalTextが使用されていることを確認（パディング付き）
+      expect(embed.data.description).toContain('こんにちは');
     });
   });
 
