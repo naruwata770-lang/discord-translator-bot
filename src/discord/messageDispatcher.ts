@@ -101,12 +101,17 @@ export class MessageDispatcher {
     const displayName = originalMessage.member?.displayName ?? originalMessage.author.username;
     const avatarURL = originalMessage.member?.displayAvatarURL() ?? originalMessage.author.displayAvatarURL();
 
+    // メンション再通知を防ぐため、cleanContentを使用
+    // cleanContentはメンションを表示名に変換する(@user → UserName)
+    const cleanText = originalMessage.cleanContent || originalText;
+
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
       .setAuthor({
         name: displayName,
         iconURL: avatarURL,
       })
+      .setDescription(this.truncateField(cleanText, 4096))
       .setTimestamp(originalMessage.createdAt);
 
     // 成功した翻訳をフィールドとして追加
@@ -159,13 +164,16 @@ export class MessageDispatcher {
         const flag = this.getLanguageFlag(result.targetLang);
         const sourceFlag = this.getLanguageFlag(result.sourceLang);
 
+        // メンション再通知を防ぐため、cleanContentを使用
+        const cleanTranslation = this.sanitizeMentions(result.translatedText);
+
         const embed = new EmbedBuilder()
           .setColor(0x5865f2)
           .setAuthor({
             name: displayName,
             iconURL: avatarURL,
           })
-          .setDescription(this.truncateField(result.translatedText, 4096))
+          .setDescription(this.truncateField(cleanTranslation, 4096))
           .setFooter({
             text: `${sourceFlag}→${flag} 自動翻訳`,
           })
@@ -176,6 +184,17 @@ export class MessageDispatcher {
     }
 
     return embeds;
+  }
+
+  /**
+   * メンション記法をサニタイズして通知を防ぐ
+   */
+  private sanitizeMentions(text: string): string {
+    return text
+      .replace(/@everyone/g, '@\u200Beveryone')  // ゼロ幅スペースを挿入
+      .replace(/@here/g, '@\u200Bhere')
+      .replace(/<@!?(\d+)>/g, '@user')  // ユーザーメンション
+      .replace(/<@&(\d+)>/g, '@role');  // ロールメンション
   }
 
   /**
@@ -190,6 +209,11 @@ export class MessageDispatcher {
     if (data.description) totalLength += data.description.length;
     if (data.footer?.text) totalLength += data.footer.text.length;
     if (data.author?.name) totalLength += data.author.name.length;
+
+    // descriptionの長さチェック（4096文字制限）
+    if (data.description && data.description.length > 4096) {
+      return false;
+    }
 
     if (data.fields) {
       for (const field of data.fields) {

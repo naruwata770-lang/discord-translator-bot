@@ -20,6 +20,7 @@ describe('MessageDispatcher', () => {
       },
       createdAt: new Date('2025-10-17T12:00:00Z'),
       reply: jest.fn().mockResolvedValue(undefined),
+      cleanContent: '',  // デフォルト値
     } as any;
 
     // モックチャンネル作成
@@ -51,6 +52,7 @@ describe('MessageDispatcher', () => {
       // Embedの内容を確認
       expect(embed.data.author.name).toBe('TestUser');
       expect(embed.data.author.icon_url).toBe('https://avatar.url');
+      expect(embed.data.description).toBe('こんにちは');
       expect(embed.data.footer.text).toContain('自動翻訳');
       expect(embed.data.timestamp).toBe('2025-10-17T12:00:00.000Z');
 
@@ -227,6 +229,136 @@ describe('MessageDispatcher', () => {
       await dispatcher.sendCommandResponse(mockChannel, '✅ 自動翻訳を有効にしました');
 
       expect(mockChannel.send).toHaveBeenCalledWith('✅ 自動翻訳を有効にしました');
+    });
+  });
+
+  describe('モバイル表示対応', () => {
+    it('元のメッセージがdescriptionに含まれることでEmbed幅が確保される', async () => {
+      const mockMessageWithClean = {
+        ...mockMessage,
+        cleanContent: 'こんにちは',
+      } as any;
+
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageWithClean, 'こんにちは');
+
+      const replyArgs = (mockMessageWithClean.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+
+      // descriptionに元のメッセージが設定されていることを確認
+      expect(embed.data.description).toBe('こんにちは');
+    });
+
+    it('メンションを含むメッセージではcleanContentを使用して再通知を防ぐ', async () => {
+      const mockMessageWithMention = {
+        ...mockMessage,
+        content: 'こんにちは <@123456789>',
+        cleanContent: 'こんにちは @UserName',
+      } as any;
+
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageWithMention, 'こんにちは <@123456789>');
+
+      const replyArgs = (mockMessageWithMention.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+
+      // descriptionにcleanContentが使用されていることを確認
+      expect(embed.data.description).toBe('こんにちは @UserName');
+      // メンション記法が含まれていないことを確認
+      expect(embed.data.description).not.toContain('<@');
+    });
+
+    it('長いメッセージはdescriptionで4096文字に切り詰められる', async () => {
+      const longText = 'あ'.repeat(5000);
+      const mockMessageWithLongText = {
+        ...mockMessage,
+        cleanContent: longText,
+      } as any;
+
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageWithLongText, longText);
+
+      const replyArgs = (mockMessageWithLongText.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+
+      // descriptionが4096文字以下に切り詰められていることを確認
+      expect(embed.data.description.length).toBeLessThanOrEqual(4096);
+      expect(embed.data.description).toContain('...');
+    });
+
+    it('フィールド値が1024文字を超える場合は切り詰められる', async () => {
+      const mockMessageForField = {
+        ...mockMessage,
+        cleanContent: 'こんにちは',
+      } as any;
+
+      const longTranslation = 'a'.repeat(2000);
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: longTranslation,
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageForField, 'こんにちは');
+
+      const replyArgs = (mockMessageForField.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+
+      // フィールド値が1024文字以下に切り詰められていることを確認
+      const field = embed.data.fields[0];
+      expect(field.value.length).toBeLessThanOrEqual(1024);
+      expect(field.value).toContain('...');
+    });
+
+    it('cleanContentが空の場合はoriginalTextにフォールバックする', async () => {
+      const mockMessageNoClean = {
+        ...mockMessage,
+        cleanContent: '',
+      } as any;
+
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageNoClean, 'こんにちは');
+
+      const replyArgs = (mockMessageNoClean.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+
+      // originalTextが使用されていることを確認
+      expect(embed.data.description).toBe('こんにちは');
     });
   });
 
