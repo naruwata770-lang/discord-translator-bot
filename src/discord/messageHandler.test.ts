@@ -25,7 +25,6 @@ describe('MessageHandler', () => {
     mockCommandParser.parse = jest.fn();
     mockTranslationService.translate = jest.fn();
     mockTranslationService.multiTranslate = jest.fn();
-    mockDispatcher.sendTranslation = jest.fn().mockResolvedValue(undefined);
     mockDispatcher.sendMultiTranslation = jest.fn().mockResolvedValue(undefined);
     mockDispatcher.sendCommandResponse = jest.fn().mockResolvedValue(undefined);
     mockDispatcher.sendError = jest.fn().mockResolvedValue(undefined);
