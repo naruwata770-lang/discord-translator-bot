@@ -475,6 +475,60 @@ describe('MessageDispatcher', () => {
       expect(field.value).toContain('会議がようやく終わりかけた頃');
     });
 
+    it('日本語Descriptionにもゼロ幅スペースが挿入される', async () => {
+      const longJapaneseText = 'きょうは天気が良くて、つい近所の公園まで散歩に出た、ベンチでは猫がのんびりと昼寝をしていた。';
+      const mockMessageForJA = {
+        ...mockMessage,
+        cleanContent: longJapaneseText,
+      } as any;
+
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageForJA, longJapaneseText);
+
+      const replyArgs = (mockMessageForJA.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+
+      // Descriptionにゼロ幅スペース（\u200B）が含まれていることを確認
+      expect(embed.data.description).toContain('\u200B');
+      // 元のテキストも含まれていることを確認
+      expect(embed.data.description).toContain('きょうは天気が良くて');
+    });
+
+    it('中国語Descriptionにもゼロ幅スペースが挿入される', async () => {
+      const longChineseText = '今天天气很好，我们一起去公园散步，小猫在长椅上懒洋洋地睡觉。';
+      const mockMessageForZH = {
+        ...mockMessage,
+        cleanContent: longChineseText,
+      } as any;
+
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: 'こんにちは',
+          sourceLang: 'zh',
+          targetLang: 'ja',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageForZH, longChineseText);
+
+      const replyArgs = (mockMessageForZH.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+
+      // Descriptionにゼロ幅スペース（\u200B）が含まれていることを確認
+      expect(embed.data.description).toContain('\u200B');
+      // 元のテキストも含まれていることを確認
+      expect(embed.data.description).toContain('今天天气很好');
+    });
+
     it('日本語フィールドにもゼロ幅スペースが挿入される', async () => {
       const longJapaneseText = 'ついに雨が止み、みんなのいた教室で、笑い声が戻ってきた。';
       const mockMessageForCJK = {
