@@ -73,6 +73,60 @@ describe('PoeApiClient', () => {
       expect(body.messages[0].content).toContain('English');
       expect(body.messages[0].content).toContain('こんにちは');
     });
+
+    it('辞書ヒント付きの翻訳が成功する', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: 'カラピチューは強い',
+            },
+          },
+        ],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      const dictionaryHint = 'Use these translations for specific terms:\n- 卡拉彼丘 → カラピチュー';
+
+      const result = await client.translate('卡拉彼丘很强', 'zh', 'ja', dictionaryHint);
+
+      expect(result).toBe('カラピチューは強い');
+
+      const callArgs = (global.fetch as jest.Mock).mock.calls[0][1];
+      const body = JSON.parse(callArgs.body);
+
+      // プロンプトに辞書ヒントが含まれているか確認
+      expect(body.messages[0].content).toContain(dictionaryHint);
+      expect(body.messages[0].content).toContain('卡拉彼丘');
+      expect(body.messages[0].content).toContain('カラピチュー');
+    });
+
+    it('辞書ヒントなしでも動作する', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: '你好' } }],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      const result = await client.translate('こんにちは', 'ja', 'zh');
+
+      expect(result).toBe('你好');
+
+      const callArgs = (global.fetch as jest.Mock).mock.calls[0][1];
+      const body = JSON.parse(callArgs.body);
+
+      // 辞書関連の内容がプロンプトに含まれていないことを確認
+      expect(body.messages[0].content).not.toContain('Use these translations');
+    });
   });
 
   describe('エラーハンドリング', () => {
