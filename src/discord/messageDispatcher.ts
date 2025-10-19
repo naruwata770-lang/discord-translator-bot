@@ -105,22 +105,25 @@ export class MessageDispatcher {
     // cleanContentはメンションを表示名に変換する(@user → UserName)
     const cleanText = originalMessage.cleanContent || originalText;
 
+    // モバイル表示でEmbed幅を確保するため、Descriptionに最小幅を設定
+    const descriptionWithWidth = this.ensureMinimumWidthForDescription(
+      this.truncateField(cleanText, 4096)
+    );
+
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
       .setAuthor({
         name: displayName,
         iconURL: avatarURL,
       })
-      .setDescription(this.truncateField(cleanText, 4096))
+      .setDescription(descriptionWithWidth)
       .setTimestamp(originalMessage.createdAt);
 
     // 成功した翻訳をフィールドとして追加
     for (const result of results) {
       if (result.status === 'success') {
         const flag = this.getLanguageFlag(result.targetLang);
-        const fieldValue = this.ensureMinimumWidth(
-          this.truncateField(result.translatedText, 1024)
-        );
+        const fieldValue = this.truncateField(result.translatedText, 1024);
         embed.addFields({
           name: `${flag} ${this.getLanguageName(result.targetLang)}`,
           value: fieldValue,
@@ -241,17 +244,20 @@ export class MessageDispatcher {
   }
 
   /**
-   * モバイル表示で幅が狭くならないように最小幅を確保
+   * Description用：モバイル表示でEmbed幅を確保するため最小幅を設定
    * Braille Pattern Blank (\u2800) を使って見えない文字で幅を確保
+   *
+   * Descriptionの長さがEmbed全体の幅を決定するため、
+   * 必ず十分な長さを確保することでFieldsも正しく表示される
    */
-  private ensureMinimumWidth(text: string): string {
-    // モバイルで表示幅を確保するため、末尾に見えない文字を追加
+  private ensureMinimumWidthForDescription(text: string): string {
+    // モバイルで確実に全幅表示するため、最小40文字分のパディングを追加
     // Braille Pattern Blankは表示されないが幅を持つ
-    // 1024文字制限を超えないように、残り文字数を計算
-    const widthPaddingLength = Math.min(40, 1024 - text.length - 2); // -2は改行分
-    if (widthPaddingLength > 0) {
-      const widthPadding = '\u2800'.repeat(widthPaddingLength);
-      return text + '\n' + widthPadding;
+    // 4096文字制限を超えないように、残り文字数を計算
+    const paddingLength = Math.min(40, 4096 - text.length - 2); // -2は改行分
+    if (paddingLength > 0) {
+      const padding = '\u2800'.repeat(paddingLength);
+      return text + '\n' + padding;
     }
     return text;
   }
