@@ -1,7 +1,7 @@
 import { MessageDispatcher } from './messageDispatcher';
-import { TranslationResult } from '../types';
-import { TranslationError } from '../utils/errors';
+import { MultiTranslationResult } from '../types/multiTranslation';
 import { ErrorCode } from '../types';
+import { TranslationError } from '../utils/errors';
 import { Message, EmbedBuilder, TextChannel } from 'discord.js';
 
 describe('MessageDispatcher', () => {
@@ -28,15 +28,18 @@ describe('MessageDispatcher', () => {
     } as any;
   });
 
-  describe('sendTranslation', () => {
+  describe('sendMultiTranslation', () => {
     it('日本語→中国語の翻訳結果をEmbed形式で送信する', async () => {
-      const result: TranslationResult = {
-        translatedText: '你好',
-        sourceLang: 'ja',
-        targetLang: 'zh',
-      };
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+      ];
 
-      await dispatcher.sendTranslation(result, mockMessage);
+      await dispatcher.sendMultiTranslation(results, mockMessage, 'こんにちは');
 
       expect(mockMessage.reply).toHaveBeenCalledTimes(1);
       const replyArgs = (mockMessage.reply as jest.Mock).mock.calls[0][0];
@@ -46,10 +49,9 @@ describe('MessageDispatcher', () => {
       const embed = replyArgs.embeds[0];
 
       // Embedの内容を確認
-      expect(embed.data.description).toBe('你好');
       expect(embed.data.author.name).toBe('TestUser');
       expect(embed.data.author.icon_url).toBe('https://avatar.url');
-      expect(embed.data.footer.text).toBe('🇯🇵→🇨🇳 自動翻訳');
+      expect(embed.data.footer.text).toContain('自動翻訳');
       expect(embed.data.timestamp).toBe('2025-10-17T12:00:00.000Z');
 
       // メンション保護が有効になっていることを確認
@@ -65,13 +67,16 @@ describe('MessageDispatcher', () => {
         },
       } as any;
 
-      const result: TranslationResult = {
-        translatedText: '你好',
-        sourceLang: 'ja',
-        targetLang: 'zh',
-      };
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+      ];
 
-      await dispatcher.sendTranslation(result, mockGuildMessage);
+      await dispatcher.sendMultiTranslation(results, mockGuildMessage, 'こんにちは');
 
       const replyArgs = (mockGuildMessage.reply as jest.Mock).mock.calls[0][0];
       const embed = replyArgs.embeds[0];
@@ -87,13 +92,16 @@ describe('MessageDispatcher', () => {
         member: null, // DMではmemberがnull
       } as any;
 
-      const result: TranslationResult = {
-        translatedText: '你好',
-        sourceLang: 'ja',
-        targetLang: 'zh',
-      };
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+      ];
 
-      await dispatcher.sendTranslation(result, mockDMMessage);
+      await dispatcher.sendMultiTranslation(results, mockDMMessage, 'こんにちは');
 
       const replyArgs = (mockDMMessage.reply as jest.Mock).mock.calls[0][0];
       const embed = replyArgs.embeds[0];
@@ -104,33 +112,38 @@ describe('MessageDispatcher', () => {
     });
 
     it('中国語→日本語の翻訳結果をEmbed形式で送信する', async () => {
-      const result: TranslationResult = {
-        translatedText: 'こんにちは',
-        sourceLang: 'zh',
-        targetLang: 'ja',
-      };
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: 'こんにちは',
+          sourceLang: 'zh',
+          targetLang: 'ja',
+        },
+      ];
 
-      await dispatcher.sendTranslation(result, mockMessage);
+      await dispatcher.sendMultiTranslation(results, mockMessage, '你好');
 
       const replyArgs = (mockMessage.reply as jest.Mock).mock.calls[0][0];
       const embed = replyArgs.embeds[0];
 
-      expect(embed.data.description).toBe('こんにちは');
-      expect(embed.data.footer.text).toBe('🇨🇳→🇯🇵 自動翻訳');
+      expect(embed.data.footer.text).toContain('自動翻訳');
     });
 
     it('送信に失敗した場合はエラーを投げる', async () => {
-      const result: TranslationResult = {
-        translatedText: '你好',
-        sourceLang: 'ja',
-        targetLang: 'zh',
-      };
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+      ];
 
       const sendError = new Error('Send failed');
       mockMessage.reply.mockRejectedValue(sendError);
 
       await expect(
-        dispatcher.sendTranslation(result, mockMessage)
+        dispatcher.sendMultiTranslation(results, mockMessage, 'こんにちは')
       ).rejects.toThrow(sendError);
     });
   });

@@ -1,28 +1,10 @@
 import { EmbedBuilder, Message, TextChannel } from 'discord.js';
-import { TranslationResult } from '../types';
 import { TranslationError } from '../utils/errors';
 import { ErrorCode } from '../types';
 import { MultiTranslationResult } from '../types/multiTranslation';
 import logger from '../utils/logger';
 
 export class MessageDispatcher {
-  async sendTranslation(
-    result: TranslationResult,
-    originalMessage: Message
-  ): Promise<void> {
-    const embed = this.buildEmbed(result, originalMessage);
-
-    try {
-      await originalMessage.reply({
-        embeds: [embed as any],
-        allowedMentions: { parse: [], repliedUser: false }, // メンション保護（@everyone無効化 + リプライ先メンション無効化）
-      });
-    } catch (error) {
-      logger.error('Failed to send translation', { error });
-      throw error;
-    }
-  }
-
   async sendError(channel: TextChannel, error: Error): Promise<void> {
     const errorMessage = this.formatError(error);
     await channel.send(errorMessage);
@@ -107,29 +89,6 @@ export class MessageDispatcher {
     }
   }
 
-  private buildEmbed(
-    result: TranslationResult,
-    originalMessage: Message
-  ): EmbedBuilder {
-    const flag = result.sourceLang === 'ja' ? '🇯🇵→🇨🇳' : '🇨🇳→🇯🇵';
-
-    // サーバープロフィールを優先、DMの場合はグローバルプロフィールにフォールバック
-    const displayName = originalMessage.member?.displayName ?? originalMessage.author.username;
-    const avatarURL = originalMessage.member?.displayAvatarURL() ?? originalMessage.author.displayAvatarURL();
-
-    return new EmbedBuilder()
-      .setColor(0x5865f2) // Discordブルー
-      .setAuthor({
-        name: displayName,
-        iconURL: avatarURL,
-      })
-      .setDescription(result.translatedText)
-      .setFooter({
-        text: `${flag} 自動翻訳`,
-      })
-      .setTimestamp(originalMessage.createdAt); // 原文の投稿時刻を使用
-  }
-
   /**
    * 2言語翻訳結果から単一のEmbedを構築
    */
@@ -138,11 +97,15 @@ export class MessageDispatcher {
     originalMessage: Message,
     originalText: string
   ): EmbedBuilder {
+    // サーバープロフィールを優先、DMの場合はグローバルプロフィールにフォールバック
+    const displayName = originalMessage.member?.displayName ?? originalMessage.author.username;
+    const avatarURL = originalMessage.member?.displayAvatarURL() ?? originalMessage.author.displayAvatarURL();
+
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
       .setAuthor({
-        name: originalMessage.author.username,
-        iconURL: originalMessage.author.displayAvatarURL(),
+        name: displayName,
+        iconURL: avatarURL,
       })
       .setTimestamp(originalMessage.createdAt);
 
@@ -185,6 +148,10 @@ export class MessageDispatcher {
     originalMessage: Message,
     originalText: string
   ): EmbedBuilder[] {
+    // サーバープロフィールを優先、DMの場合はグローバルプロフィールにフォールバック
+    const displayName = originalMessage.member?.displayName ?? originalMessage.author.username;
+    const avatarURL = originalMessage.member?.displayAvatarURL() ?? originalMessage.author.displayAvatarURL();
+
     const embeds: EmbedBuilder[] = [];
 
     for (const result of results) {
@@ -195,8 +162,8 @@ export class MessageDispatcher {
         const embed = new EmbedBuilder()
           .setColor(0x5865f2)
           .setAuthor({
-            name: originalMessage.author.username,
-            iconURL: originalMessage.author.displayAvatarURL(),
+            name: displayName,
+            iconURL: avatarURL,
           })
           .setDescription(this.truncateField(result.translatedText, 4096))
           .setFooter({
