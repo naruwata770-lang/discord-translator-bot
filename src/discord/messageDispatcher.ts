@@ -118,7 +118,9 @@ export class MessageDispatcher {
     for (const result of results) {
       if (result.status === 'success') {
         const flag = this.getLanguageFlag(result.targetLang);
-        const fieldValue = this.truncateField(result.translatedText, 1024);
+        const fieldValue = this.ensureMinimumWidth(
+          this.truncateField(result.translatedText, 1024)
+        );
         embed.addFields({
           name: `${flag} ${this.getLanguageName(result.targetLang)}`,
           value: fieldValue,
@@ -236,6 +238,22 @@ export class MessageDispatcher {
       return text;
     }
     return text.substring(0, maxLength - 3) + '...';
+  }
+
+  /**
+   * モバイル表示で幅が狭くならないように最小幅を確保
+   * Braille Pattern Blank (\u2800) を使って見えない文字で幅を確保
+   */
+  private ensureMinimumWidth(text: string): string {
+    // モバイルで表示幅を確保するため、末尾に見えない文字を追加
+    // Braille Pattern Blankは表示されないが幅を持つ
+    // 1024文字制限を超えないように、残り文字数を計算
+    const widthPaddingLength = Math.min(40, 1024 - text.length - 2); // -2は改行分
+    if (widthPaddingLength > 0) {
+      const widthPadding = '\u2800'.repeat(widthPaddingLength);
+      return text + '\n' + widthPadding;
+    }
+    return text;
   }
 
   /**
