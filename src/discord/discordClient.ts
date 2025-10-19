@@ -20,6 +20,7 @@ export class DiscordClient {
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers, // サーバープロフィール取得に必要
       ],
       partials: [Partials.Channel, Partials.Message],
     });
