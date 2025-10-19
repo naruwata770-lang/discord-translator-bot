@@ -116,11 +116,29 @@ export class TranslationService {
       const targetLang =
         options?.targetLang || this.determineTargetLanguage(sourceLang);
 
+      // 辞書マッチング（ルールベース検出時）
+      let dictionaryHint: string | undefined;
+      if (this.dictionaryService) {
+        const matches = this.dictionaryService.findMatches(
+          text,
+          sourceLang as LanguageCode,
+          targetLang as LanguageCode
+        );
+        if (matches.length > 0) {
+          dictionaryHint = this.dictionaryService.generatePromptHint(matches);
+          logger.debug('Dictionary matches found for rule-based translation', {
+            count: matches.length,
+            terms: matches.map((m) => m.matchedTerm),
+          });
+        }
+      }
+
       // 翻訳実行
       const translatedText = await this.poeClient.translate(
         text,
         sourceLang,
-        targetLang
+        targetLang,
+        dictionaryHint
       );
 
       logger.info('Rule-based detection succeeded', {
@@ -242,6 +260,7 @@ export class TranslationService {
       try {
         // 3.1 辞書マッチング
         let glossaryHints: DictionaryMatch[] | undefined;
+        let dictionaryHint: string | undefined;
         if (this.dictionaryService) {
           const matches = this.dictionaryService.findMatches(
             text,
@@ -250,6 +269,7 @@ export class TranslationService {
           );
           if (matches.length > 0) {
             glossaryHints = matches;
+            dictionaryHint = this.dictionaryService.generatePromptHint(matches);
             logger.debug('Dictionary matches found for multiTranslate', {
               targetLang: target.lang,
               count: matches.length,
@@ -258,20 +278,27 @@ export class TranslationService {
           }
         }
 
-        // 3.2 翻訳実行（既存のtranslateメソッドを利用してリトライ機能を活用）
-        const result = await this.translate(text, {
-          sourceLang,
-          targetLang: target.lang,
-        });
+        // 3.2 翻訳実行（辞書ヒントを含めて直接poeClientを呼び出す）
+        await this.rateLimiter.acquire();
+        try {
+          const translatedText = await this.poeClient.translate(
+            text,
+            sourceLang,
+            target.lang,
+            dictionaryHint
+          );
 
-        // 3.3 成功結果を返す
-        return {
-          status: 'success' as const,
-          sourceLang,
-          targetLang: target.lang,
-          translatedText: result.translatedText,
-          glossaryHints,
-        };
+          // 3.3 成功結果を返す
+          return {
+            status: 'success' as const,
+            sourceLang,
+            targetLang: target.lang,
+            translatedText,
+            glossaryHints,
+          };
+        } finally {
+          this.rateLimiter.release();
+        }
       } catch (error) {
         // 3.4 部分的な失敗を許容してエラー結果を返す
         logger.warn('Translation failed for one target in multiTranslate', {
