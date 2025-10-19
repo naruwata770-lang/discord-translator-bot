@@ -475,6 +475,60 @@ describe('MessageDispatcher', () => {
       expect(field.value).toContain('呼吸がようやく落ち着き始めた際');
     });
 
+    it('日本語Descriptionにもゼロ幅スペースが挿入される', async () => {
+      const longJapaneseText = 'ようやく刺激が止まり、つかの間の静寂が戻った部屋で、フラヴィアは死体さながらぐったりと寝ていた。';
+      const mockMessageForJA = {
+        ...mockMessage,
+        cleanContent: longJapaneseText,
+      } as any;
+
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageForJA, longJapaneseText);
+
+      const replyArgs = (mockMessageForJA.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+
+      // Descriptionにゼロ幅スペース（\u200B）が含まれていることを確認
+      expect(embed.data.description).toContain('\u200B');
+      // 元のテキストも含まれていることを確認
+      expect(embed.data.description).toContain('ようやく刺激が止まり');
+    });
+
+    it('中国語Descriptionにもゼロ幅スペースが挿入される', async () => {
+      const longChineseText = '终于刺激停止了，短暂的寂静回到了房间，弗拉维亿像尸体一样瘫软地躺着。';
+      const mockMessageForZH = {
+        ...mockMessage,
+        cleanContent: longChineseText,
+      } as any;
+
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: 'こんにちは',
+          sourceLang: 'zh',
+          targetLang: 'ja',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageForZH, longChineseText);
+
+      const replyArgs = (mockMessageForZH.reply as jest.Mock).mock.calls[0][0];
+      const embed = replyArgs.embeds[0];
+
+      // Descriptionにゼロ幅スペース（\u200B）が含まれていることを確認
+      expect(embed.data.description).toContain('\u200B');
+      // 元のテキストも含まれていることを確認
+      expect(embed.data.description).toContain('终于刺激停止了');
+    });
+
     it('日本語フィールドにもゼロ幅スペースが挿入される', async () => {
       const longJapaneseText = 'ついに刺激が止み、フラヴィアのいた部屋で、沈黙が戻った音がした。';
       const mockMessageForCJK = {
