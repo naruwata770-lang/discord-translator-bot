@@ -105,9 +105,15 @@ export class MessageDispatcher {
     // cleanContentはメンションを表示名に変換する(@user → UserName)
     const cleanText = originalMessage.cleanContent || originalText;
 
+    // ソース言語を取得（CJKテキスト改行対策とフッターで使用）
+    const sourceLang = results[0]?.sourceLang || 'unknown';
+
+    // CJKテキスト（中国語・日本語）の改行対策: ゼロ幅スペース追加
+    const textWithBreaks = this.addWordBreakOpportunities(cleanText, sourceLang);
+
     // モバイル表示でEmbed幅を確保するため、Descriptionに最小幅を設定
     const descriptionWithWidth = this.ensureMinimumWidthForDescription(
-      this.truncateField(cleanText, 4096)
+      this.truncateField(textWithBreaks, 4096)
     );
 
     const embed = new EmbedBuilder()
@@ -142,8 +148,7 @@ export class MessageDispatcher {
       }
     }
 
-    // フッター
-    const sourceLang = results[0]?.sourceLang || 'unknown';
+    // フッター（sourceLangは上で既に取得済み）
     const sourceFlag = this.getLanguageFlag(sourceLang);
     embed.setFooter({
       text: `${sourceFlag} 自動翻訳`,
