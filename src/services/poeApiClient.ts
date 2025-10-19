@@ -23,9 +23,10 @@ export class PoeApiClient {
   async translate(
     text: string,
     sourceLang: string,
-    targetLang: string
+    targetLang: string,
+    dictionaryHint?: string
   ): Promise<string> {
-    const prompt = this.buildPrompt(text, sourceLang, targetLang);
+    const prompt = this.buildPrompt(text, sourceLang, targetLang, dictionaryHint);
 
     let lastError: TranslationError | null = null;
 
@@ -77,7 +78,8 @@ export class PoeApiClient {
   private buildPrompt(
     text: string,
     sourceLang: string,
-    targetLang: string
+    targetLang: string,
+    dictionaryHint?: string
   ): string {
     const langMap: Record<string, string> = {
       ja: 'Japanese',
@@ -88,7 +90,16 @@ export class PoeApiClient {
     const sourceLanguage = langMap[sourceLang] || sourceLang;
     const targetLanguage = langMap[targetLang] || targetLang;
 
-    return `Translate the following text from ${sourceLanguage} to ${targetLanguage}. Only output the translation, without any explanation or additional text.\n\nText: ${text}`;
+    let prompt = `Translate the following text from ${sourceLanguage} to ${targetLanguage}. Only output the translation, without any explanation or additional text.`;
+
+    // 辞書ヒントがある場合は追加
+    if (dictionaryHint && dictionaryHint.trim() !== '') {
+      prompt += `\n\n${dictionaryHint}`;
+    }
+
+    prompt += `\n\nText: ${text}`;
+
+    return prompt;
   }
 
   private async callApi(prompt: string): Promise<PoeApiResponse> {
