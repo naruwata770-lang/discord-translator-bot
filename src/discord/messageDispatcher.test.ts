@@ -279,8 +279,8 @@ describe('MessageDispatcher', () => {
       const replyArgs = (mockMessageWithMention.reply as jest.Mock).mock.calls[0][0];
       const embed = replyArgs.embeds[0];
 
-      // descriptionにcleanContentが使用されていることを確認（パディング付き）
-      expect(embed.data.description).toContain('こんにちは @UserName');
+      // descriptionにcleanContentが使用されていることを確認（パディング付き、ゼロ幅スペースを除去して検証）
+      expect(embed.data.description.replace(/\u200B/g, '')).toContain('こんにちは @UserName');
       // メンション記法が含まれていないことを確認
       expect(embed.data.description).not.toContain('<@');
     });
@@ -471,8 +471,8 @@ describe('MessageDispatcher', () => {
 
       // ゼロ幅スペース（\u200B）が含まれていることを確認
       expect(field.value).toContain('\u200B');
-      // 元のテキストも含まれていることを確認
-      expect(field.value).toContain('呼吸がようやく落ち着き始めた際');
+      // 元のテキストも含まれていることを確認（ゼロ幅スペースを除去して検証）
+      expect(field.value.replace(/\u200B/g, '')).toContain('呼吸がようやく落ち着き始めた際');
     });
 
     it('日本語Descriptionにもゼロ幅スペースが挿入される', async () => {
