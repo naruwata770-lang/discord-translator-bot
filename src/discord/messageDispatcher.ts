@@ -292,9 +292,11 @@ export class MessageDispatcher {
       return text;
     }
 
-    // 15文字ごとにゼロ幅スペースを挿入
-    // （モバイル画面幅に合わせた適切な間隔）
-    const interval = 15;
+    // 10文字ごとにゼロ幅スペースを挿入
+    // iPhone 15 Pro MAX (430px画面幅) で約14.2文字/行
+    // 安全マージン（±3文字）を考慮して10文字間隔を採用
+    // これにより全てのモバイルデバイスで確実に改行される
+    const interval = 10;
     const regex = new RegExp(`(.{${interval}})`, 'g');
     return text.replace(regex, '$1\u200B');
   }
