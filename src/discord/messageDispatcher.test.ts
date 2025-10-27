@@ -30,7 +30,7 @@ describe('MessageDispatcher', () => {
   });
 
   describe('sendMultiTranslation', () => {
-    it('日本語→中国語の翻訳結果をEmbed形式で送信する', async () => {
+    it('日本語→中国語の翻訳結果をplain textメッセージで送信する', async () => {
       const results: MultiTranslationResult[] = [
         {
           status: 'success',
@@ -45,76 +45,22 @@ describe('MessageDispatcher', () => {
       expect(mockMessage.reply).toHaveBeenCalledTimes(1);
       const replyArgs = (mockMessage.reply as jest.Mock).mock.calls[0][0];
 
-      // Embedが含まれていることを確認
-      expect(replyArgs.embeds).toHaveLength(1);
-      const embed = replyArgs.embeds[0];
+      // Plain textメッセージが送信されることを確認
+      expect(replyArgs.content).toBeDefined();
+      expect(replyArgs.embeds).toBeUndefined();
 
-      // Embedの内容を確認
-      expect(embed.data.author.name).toBe('TestUser');
-      expect(embed.data.author.icon_url).toBe('https://avatar.url');
-      // Descriptionには元のメッセージ + モバイル幅確保用のパディングが含まれる
-      expect(embed.data.description).toContain('こんにちは');
-      expect(embed.data.footer.text).toContain('自動翻訳');
-      expect(embed.data.timestamp).toBe('2025-10-17T12:00:00.000Z');
+      // メッセージの内容を確認
+      expect(replyArgs.content).toContain('💬 **原文**');
+      expect(replyArgs.content).toContain('こんにちは');
+      expect(replyArgs.content).toContain('🇨🇳 **中文**');
+      expect(replyArgs.content).toContain('你好');
+      expect(replyArgs.content).toContain('🇯🇵 自動翻訳');
 
       // メンション保護が有効になっていることを確認
       expect(replyArgs.allowedMentions).toEqual({ parse: [], repliedUser: false });
     });
 
-    it('サーバー内のメッセージではサーバープロフィールのアイコンとニックネームを使用する', async () => {
-      const mockGuildMessage = {
-        ...mockMessage,
-        member: {
-          displayName: 'ServerNickname',
-          displayAvatarURL: jest.fn().mockReturnValue('https://server-avatar.url'),
-        },
-      } as any;
-
-      const results: MultiTranslationResult[] = [
-        {
-          status: 'success',
-          translatedText: '你好',
-          sourceLang: 'ja',
-          targetLang: 'zh',
-        },
-      ];
-
-      await dispatcher.sendMultiTranslation(results, mockGuildMessage, 'こんにちは');
-
-      const replyArgs = (mockGuildMessage.reply as jest.Mock).mock.calls[0][0];
-      const embed = replyArgs.embeds[0];
-
-      // サーバープロフィールのアイコンとニックネームが使用されていることを確認
-      expect(embed.data.author.name).toBe('ServerNickname');
-      expect(embed.data.author.icon_url).toBe('https://server-avatar.url');
-    });
-
-    it('DMではグローバルプロフィールのアイコンとユーザー名を使用する（フォールバック）', async () => {
-      const mockDMMessage = {
-        ...mockMessage,
-        member: null, // DMではmemberがnull
-      } as any;
-
-      const results: MultiTranslationResult[] = [
-        {
-          status: 'success',
-          translatedText: '你好',
-          sourceLang: 'ja',
-          targetLang: 'zh',
-        },
-      ];
-
-      await dispatcher.sendMultiTranslation(results, mockDMMessage, 'こんにちは');
-
-      const replyArgs = (mockDMMessage.reply as jest.Mock).mock.calls[0][0];
-      const embed = replyArgs.embeds[0];
-
-      // グローバルプロフィールにフォールバックすることを確認
-      expect(embed.data.author.name).toBe('TestUser');
-      expect(embed.data.author.icon_url).toBe('https://avatar.url');
-    });
-
-    it('中国語→日本語の翻訳結果をEmbed形式で送信する', async () => {
+    it('中国語→日本語の翻訳結果をplain textメッセージで送信する', async () => {
       const results: MultiTranslationResult[] = [
         {
           status: 'success',
@@ -127,9 +73,13 @@ describe('MessageDispatcher', () => {
       await dispatcher.sendMultiTranslation(results, mockMessage, '你好');
 
       const replyArgs = (mockMessage.reply as jest.Mock).mock.calls[0][0];
-      const embed = replyArgs.embeds[0];
 
-      expect(embed.data.footer.text).toContain('自動翻訳');
+      // Plain textメッセージが送信されることを確認
+      expect(replyArgs.content).toContain('💬 **原文**');
+      expect(replyArgs.content).toContain('你好');
+      expect(replyArgs.content).toContain('🇯🇵 **日本語**');
+      expect(replyArgs.content).toContain('こんにちは');
+      expect(replyArgs.content).toContain('🇨🇳 自動翻訳');
     });
 
     it('送信に失敗した場合はエラーを投げる', async () => {
@@ -233,31 +183,7 @@ describe('MessageDispatcher', () => {
     });
   });
 
-  describe('モバイル表示対応', () => {
-    it('元のメッセージがdescriptionに含まれることでEmbed幅が確保される', async () => {
-      const mockMessageWithClean = {
-        ...mockMessage,
-        cleanContent: 'こんにちは',
-      } as any;
-
-      const results: MultiTranslationResult[] = [
-        {
-          status: 'success',
-          translatedText: '你好',
-          sourceLang: 'ja',
-          targetLang: 'zh',
-        },
-      ];
-
-      await dispatcher.sendMultiTranslation(results, mockMessageWithClean, 'こんにちは');
-
-      const replyArgs = (mockMessageWithClean.reply as jest.Mock).mock.calls[0][0];
-      const embed = replyArgs.embeds[0];
-
-      // descriptionに元のメッセージ + モバイル幅確保用のパディングが含まれることを確認
-      expect(embed.data.description).toContain('こんにちは');
-    });
-
+  describe('Plain textメッセージ機能', () => {
     it('メンションを含むメッセージではcleanContentを使用して再通知を防ぐ', async () => {
       const mockMessageWithMention = {
         ...mockMessage,
@@ -277,47 +203,12 @@ describe('MessageDispatcher', () => {
       await dispatcher.sendMultiTranslation(results, mockMessageWithMention, 'こんにちは <@123456789>');
 
       const replyArgs = (mockMessageWithMention.reply as jest.Mock).mock.calls[0][0];
-      const embed = replyArgs.embeds[0];
 
-      // descriptionにcleanContentが使用されていることを確認（パディング付き、ゼロ幅スペースを除去して検証）
-      expect(embed.data.description.replace(/\u200B/g, '')).toContain('こんにちは @UserName');
+      // cleanContentが使用されていることを確認
+      expect(replyArgs.content).toContain('こんにちは @UserName');
       // メンション記法が含まれていないことを確認
-      expect(embed.data.description).not.toContain('<@');
+      expect(replyArgs.content).not.toContain('<@123456789>');
     });
-
-    it('長いメッセージはdescriptionで4096文字に切り詰められる', async () => {
-      const longText = 'あ'.repeat(3000);
-      const mockMessageWithLongText = {
-        ...mockMessage,
-        cleanContent: longText,
-      } as any;
-
-      const results: MultiTranslationResult[] = [
-        {
-          status: 'success',
-          translatedText: 'a'.repeat(2000),
-          sourceLang: 'ja',
-          targetLang: 'zh',
-        },
-        {
-          status: 'success',
-          translatedText: 'b'.repeat(2000),
-          sourceLang: 'ja',
-          targetLang: 'en',
-        },
-      ];
-
-      await dispatcher.sendMultiTranslation(results, mockMessageWithLongText, longText);
-
-      const replyArgs = (mockMessageWithLongText.reply as jest.Mock).mock.calls[0][0];
-      const embed = replyArgs.embeds[0];
-
-      // descriptionが4096文字以下に切り詰められていることを確認
-      expect(embed.data.description.length).toBeLessThanOrEqual(4096);
-      // 切り詰めが発生したことを示す警告メッセージが含まれていることを確認
-      expect(embed.data.description).toContain('⚠️ テキストが長すぎるため、一部の翻訳が省略されました');
-    });
-
 
     it('cleanContentが空の場合はoriginalTextにフォールバックする', async () => {
       const mockMessageNoClean = {
@@ -337,10 +228,60 @@ describe('MessageDispatcher', () => {
       await dispatcher.sendMultiTranslation(results, mockMessageNoClean, 'こんにちは');
 
       const replyArgs = (mockMessageNoClean.reply as jest.Mock).mock.calls[0][0];
-      const embed = replyArgs.embeds[0];
 
-      // originalTextが使用されていることを確認（パディング付き）
-      expect(embed.data.description).toContain('こんにちは');
+      // originalTextが使用されていることを確認
+      expect(replyArgs.content).toContain('こんにちは');
+    });
+
+    it('2000文字以下のメッセージは1つのメッセージで送信される', async () => {
+      const shortText = 'こんにちは';
+      const mockMessageShort = {
+        ...mockMessage,
+        cleanContent: shortText,
+        channel: mockChannel,
+      } as any;
+
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+        {
+          status: 'success',
+          translatedText: 'Hello',
+          sourceLang: 'ja',
+          targetLang: 'en',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessageShort, shortText);
+
+      // 1つのreplyのみが呼ばれる
+      expect(mockMessageShort.reply).toHaveBeenCalledTimes(1);
+      // channel.sendは呼ばれない（分割なし）
+      expect(mockChannel.send).not.toHaveBeenCalled();
+    });
+
+    it('翻訳結果のメンションがサニタイズされる', async () => {
+      const results: MultiTranslationResult[] = [
+        {
+          status: 'success',
+          translatedText: 'Hello <@123456789> and @everyone',
+          sourceLang: 'ja',
+          targetLang: 'en',
+        },
+      ];
+
+      await dispatcher.sendMultiTranslation(results, mockMessage, 'こんにちは');
+
+      const replyArgs = (mockMessage.reply as jest.Mock).mock.calls[0][0];
+
+      // メンションがサニタイズされていることを確認
+      expect(replyArgs.content).toContain('@user');
+      expect(replyArgs.content).toContain('@\u200Beveryone');
+      expect(replyArgs.content).not.toContain('<@123456789>');
     });
   });
 
@@ -427,145 +368,5 @@ describe('MessageDispatcher', () => {
     });
   });
 
-  describe('CJKテキストの改行対策', () => {
-    it('中国語翻訳結果にゼロ幅スペースが挿入されて改行機会が提供される', async () => {
-      const longChineseText = '会議がようやく終わりかけた頃、友達から突然お茶の誘いが届いた。';
-      const mockMessageForCJK = {
-        ...mockMessage,
-        cleanContent: 'こんにちは',
-      } as any;
-
-      const results: MultiTranslationResult[] = [
-        {
-          status: 'success',
-          translatedText: longChineseText,
-          sourceLang: 'ja',
-          targetLang: 'zh',
-        },
-      ];
-
-      await dispatcher.sendMultiTranslation(results, mockMessageForCJK, 'こんにちは');
-
-      const replyArgs = (mockMessageForCJK.reply as jest.Mock).mock.calls[0][0];
-      const embed = replyArgs.embeds[0];
-
-      // Description内に中国語翻訳結果が含まれている
-      expect(embed.data.description).toContain('🇨🇳');
-      // ゼロ幅スペース（\u200B）が含まれていることを確認
-      expect(embed.data.description).toContain('\u200B');
-      // 元のテキストも含まれていることを確認（ゼロ幅スペースを除去して検証）
-      expect(embed.data.description.replace(/\u200B/g, '')).toContain('会議がようやく終わりかけた頃');
-    });
-
-    it('日本語Descriptionにもゼロ幅スペースが挿入される', async () => {
-      const longJapaneseText = 'きょうは天気が良くて、つい近所の公園まで散歩に出た、ベンチでは猫がのんびりと昼寝をしていた。';
-      const mockMessageForJA = {
-        ...mockMessage,
-        cleanContent: longJapaneseText,
-      } as any;
-
-      const results: MultiTranslationResult[] = [
-        {
-          status: 'success',
-          translatedText: '你好',
-          sourceLang: 'ja',
-          targetLang: 'zh',
-        },
-      ];
-
-      await dispatcher.sendMultiTranslation(results, mockMessageForJA, longJapaneseText);
-
-      const replyArgs = (mockMessageForJA.reply as jest.Mock).mock.calls[0][0];
-      const embed = replyArgs.embeds[0];
-
-      // Descriptionにゼロ幅スペース（\u200B）が含まれていることを確認
-      expect(embed.data.description).toContain('\u200B');
-      // 元のテキストも含まれていることを確認
-      expect(embed.data.description).toContain('きょうは天気が良くて');
-    });
-
-    it('中国語Descriptionにもゼロ幅スペースが挿入される', async () => {
-      const longChineseText = '今天天气很好，我们一起去公园散步，小猫在长椅上懒洋洋地睡觉。';
-      const mockMessageForZH = {
-        ...mockMessage,
-        cleanContent: longChineseText,
-      } as any;
-
-      const results: MultiTranslationResult[] = [
-        {
-          status: 'success',
-          translatedText: 'こんにちは',
-          sourceLang: 'zh',
-          targetLang: 'ja',
-        },
-      ];
-
-      await dispatcher.sendMultiTranslation(results, mockMessageForZH, longChineseText);
-
-      const replyArgs = (mockMessageForZH.reply as jest.Mock).mock.calls[0][0];
-      const embed = replyArgs.embeds[0];
-
-      // Descriptionにゼロ幅スペース（\u200B）が含まれていることを確認
-      expect(embed.data.description).toContain('\u200B');
-      // 元のテキストも含まれていることを確認
-      expect(embed.data.description).toContain('今天天气很好');
-    });
-
-    it('日本語翻訳結果にもゼロ幅スペースが挿入される', async () => {
-      const longJapaneseText = 'ついに雨が止み、みんなのいた教室で、笑い声が戻ってきた。';
-      const mockMessageForCJK = {
-        ...mockMessage,
-        cleanContent: '你好',
-      } as any;
-
-      const results: MultiTranslationResult[] = [
-        {
-          status: 'success',
-          translatedText: longJapaneseText,
-          sourceLang: 'zh',
-          targetLang: 'ja',
-        },
-      ];
-
-      await dispatcher.sendMultiTranslation(results, mockMessageForCJK, '你好');
-
-      const replyArgs = (mockMessageForCJK.reply as jest.Mock).mock.calls[0][0];
-      const embed = replyArgs.embeds[0];
-
-      // Description内に日本語翻訳結果が含まれている
-      expect(embed.data.description).toContain('🇯🇵');
-      // ゼロ幅スペース（\u200B）が含まれていることを確認
-      expect(embed.data.description).toContain('\u200B');
-    });
-
-    it('英語翻訳結果にはゼロ幅スペースが挿入されない', async () => {
-      const englishText = 'At last, the rain stopped, and in the park where a fleeting calm returned, a cat lay napping on a bench.';
-      const mockMessageForEN = {
-        ...mockMessage,
-        cleanContent: 'こんにちは',
-      } as any;
-
-      const results: MultiTranslationResult[] = [
-        {
-          status: 'success',
-          translatedText: englishText,
-          sourceLang: 'ja',
-          targetLang: 'en',
-        },
-      ];
-
-      await dispatcher.sendMultiTranslation(results, mockMessageForEN, 'こんにちは');
-
-      const replyArgs = (mockMessageForEN.reply as jest.Mock).mock.calls[0][0];
-      const embed = replyArgs.embeds[0];
-
-      // Description内に英語翻訳結果が含まれている
-      expect(embed.data.description).toContain('🇺🇸');
-      // 英語の場合、ゼロ幅スペースは挿入されない（スペースで自然に改行される）
-      // Descriptionには原文（日本語）のゼロ幅スペースがあるので、英語部分のみをチェック
-      const descLines = embed.data.description.split('\n');
-      const englishLine = descLines.find((line: string) => line.includes(englishText));
-      expect(englishLine).toBe(englishText); // ゼロ幅スペースなしでそのまま
-    });
-  });
 });
+
