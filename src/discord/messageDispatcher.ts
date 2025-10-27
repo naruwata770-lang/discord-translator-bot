@@ -55,102 +55,175 @@ export class MessageDispatcher {
       return;
     }
 
-    // Embedを構築（Description統合型、4096文字制限は内部で処理）
-    const embed = this.buildMultiEmbed(results, originalMessage, originalText);
+    // 通常テキストメッセージを構築
+    const message = this.buildPlainTextMessage(results, originalMessage, originalText);
 
-    // Embedを送信
-    try {
-      await originalMessage.reply({
-        embeds: [embed as any],
-        allowedMentions: { parse: [], repliedUser: false },
-      });
-    } catch (error) {
-      logger.error('Failed to send multi-translation', { error });
-      throw error;
+    // 2000文字チェック
+    if (message.length <= 2000) {
+      // 1メッセージで送信
+      try {
+        await originalMessage.reply({
+          content: message,
+          allowedMentions: { parse: [], repliedUser: false },
+        });
+      } catch (error) {
+        logger.error('Failed to send multi-translation', { error });
+        throw error;
+      }
+    } else {
+      // 複数メッセージに分割（稀なケース）
+      try {
+        await this.sendSplitMessages(results, originalMessage, originalText);
+      } catch (error) {
+        logger.error('Failed to send split messages', { error });
+        throw error;
+      }
     }
   }
 
   /**
-   * 2言語翻訳結果から単一のEmbedを構築（Description統合型）
+   * 2言語翻訳結果から通常テキストメッセージを構築
    *
-   * Phase 2実装: FieldをすべてDescriptionに統合することで、
-   * モバイルでのCJKテキスト表示問題を根本的に解決
+   * Phase 3実装: Embed形式を廃止し、通常テキストメッセージを使用することで、
+   * Discord iOSが自動的にCJKテキストを折り返すようにする
    */
-  private buildMultiEmbed(
+  private buildPlainTextMessage(
     results: MultiTranslationResult[],
     originalMessage: Message,
     originalText: string
-  ): EmbedBuilder {
-    // サーバープロフィールを優先、DMの場合はグローバルプロフィールにフォールバック
-    const displayName = originalMessage.member?.displayName ?? originalMessage.author.username;
-    const avatarURL = originalMessage.member?.displayAvatarURL() ?? originalMessage.author.displayAvatarURL();
-
+  ): string {
     // メンション再通知を防ぐため、cleanContentを使用
     const cleanText = originalMessage.cleanContent || originalText;
 
     // ソース言語を取得
     const sourceLang = results[0]?.sourceLang || 'unknown';
 
-    // Descriptionに原文と翻訳結果を統合
-    const maxLength = 4096;
-    let description = '';
-    let truncated = false;
-
     // 原文セクション
-    const originalWithBreaks = this.addWordBreakOpportunities(cleanText, sourceLang);
-    const originalSection = `💬 **原文**\n${originalWithBreaks}\n\n`;
-    description += originalSection;
+    let message = `💬 **原文**\n${cleanText}\n\n`;
 
     // 翻訳結果セクション（各言語ごと）
     for (const result of results) {
-      let section = '';
-
       if (result.status === 'success') {
         const flag = this.getLanguageFlag(result.targetLang);
         const langName = this.getLanguageName(result.targetLang);
-
-        // メンションサニタイズを適用
         const sanitizedText = this.sanitizeMentions(result.translatedText);
-        // CJKテキストにゼロ幅スペース挿入
-        const translatedWithBreaks = this.addWordBreakOpportunities(sanitizedText, result.targetLang);
 
-        section = `${flag} **${langName}**\n${translatedWithBreaks}\n\n`;
+        message += `${flag} **${langName}**\n${sanitizedText}\n\n`;
       } else {
         // エラーの場合
         const flag = this.getLanguageFlag(result.targetLang);
         const langName = this.getLanguageName(result.targetLang);
-        section = `${flag} **${langName}**\n⚠️ 翻訳に失敗しました\n\n`;
+        message += `${flag} **${langName}**\n⚠️ 翻訳に失敗しました\n\n`;
       }
-
-      // 4096文字制限チェック（警告メッセージ分の余裕を確保）
-      if (description.length + section.length > maxLength - 100) {
-        truncated = true;
-        break;
-      }
-
-      description += section;
     }
 
-    // 切り詰めが発生した場合は警告メッセージを追加
-    if (truncated) {
-      description += '\n⚠️ テキストが長すぎるため、一部の翻訳が省略されました';
-    }
-
-    // Embedを構築（FieldなしのDescription統合型）
+    // フッター
     const sourceFlag = this.getLanguageFlag(sourceLang);
-    const embed = new EmbedBuilder()
-      .setColor(0x5865f2)
-      .setAuthor({
-        name: displayName,
-        iconURL: avatarURL,
-      })
-      .setDescription(description.trim())
-      .setFooter({
-        text: `${sourceFlag} 自動翻訳`,
-      })
-      .setTimestamp(originalMessage.createdAt);
+    message += `${sourceFlag} 自動翻訳`;
 
-    return embed;
+    return message;
+  }
+
+  /**
+   * 2000文字を超える場合に複数メッセージに分割して送信
+   */
+  private async sendSplitMessages(
+    results: MultiTranslationResult[],
+    originalMessage: Message,
+    originalText: string
+  ): Promise<void> {
+    const sourceLang = results[0]?.sourceLang || 'unknown';
+    const cleanText = originalMessage.cleanContent || originalText;
+    const sourceFlag = this.getLanguageFlag(sourceLang);
+
+    // 原文を送信
+    const originalMsg = `💬 **原文**\n${cleanText}\n\n${sourceFlag} 自動翻訳`;
+    if (originalMsg.length <= 2000) {
+      await originalMessage.reply({
+        content: originalMsg,
+        allowedMentions: { parse: [], repliedUser: false },
+      });
+    } else {
+      // 原文自体が2000文字超過（極めて稀）
+      const chunks = this.splitText(cleanText, 1900);
+      for (let i = 0; i < chunks.length; i++) {
+        const content = i === 0
+          ? `💬 **原文**\n${chunks[i]}`
+          : `💬 **原文（続き）**\n${chunks[i]}`;
+
+        if (i === 0) {
+          await originalMessage.reply({
+            content,
+            allowedMentions: { parse: [], repliedUser: false },
+          });
+        } else {
+          await (originalMessage.channel as any).send(content);
+        }
+      }
+    }
+
+    // 各翻訳結果を送信
+    for (const result of results) {
+      if (result.status === 'success') {
+        const flag = this.getLanguageFlag(result.targetLang);
+        const langName = this.getLanguageName(result.targetLang);
+        const sanitizedText = this.sanitizeMentions(result.translatedText);
+
+        const translationMsg = `${flag} **${langName}**\n${sanitizedText}`;
+
+        if (translationMsg.length <= 2000) {
+          await (originalMessage.channel as any).send(translationMsg);
+        } else {
+          // 翻訳結果が2000文字超過
+          const chunks = this.splitText(sanitizedText, 1900);
+          for (let i = 0; i < chunks.length; i++) {
+            const content = i === 0
+              ? `${flag} **${langName}**\n${chunks[i]}`
+              : `${flag} **${langName}（続き）**\n${chunks[i]}`;
+            await (originalMessage.channel as any).send(content);
+          }
+        }
+      } else {
+        // エラーの場合
+        const flag = this.getLanguageFlag(result.targetLang);
+        const langName = this.getLanguageName(result.targetLang);
+        await (originalMessage.channel as any).send(`${flag} **${langName}**\n⚠️ 翻訳に失敗しました`);
+      }
+    }
+  }
+
+  /**
+   * テキストを指定文字数で分割（改行を考慮）
+   */
+  private splitText(text: string, maxLength: number): string[] {
+    if (text.length <= maxLength) return [text];
+
+    const chunks: string[] = [];
+    const lines = text.split('\n');
+    let currentChunk = '';
+
+    for (const line of lines) {
+      if (currentChunk.length + line.length + 1 <= maxLength) {
+        currentChunk += (currentChunk ? '\n' : '') + line;
+      } else {
+        if (currentChunk) chunks.push(currentChunk);
+
+        // 1行が長すぎる場合は強制分割
+        if (line.length > maxLength) {
+          let remaining = line;
+          while (remaining.length > maxLength) {
+            chunks.push(remaining.substring(0, maxLength));
+            remaining = remaining.substring(maxLength);
+          }
+          currentChunk = remaining;
+        } else {
+          currentChunk = line;
+        }
+      }
+    }
+
+    if (currentChunk) chunks.push(currentChunk);
+    return chunks;
   }
 
 
