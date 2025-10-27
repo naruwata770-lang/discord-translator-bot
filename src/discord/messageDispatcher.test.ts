@@ -286,7 +286,7 @@ describe('MessageDispatcher', () => {
     });
 
     it('長いメッセージはdescriptionで4096文字に切り詰められる', async () => {
-      const longText = 'あ'.repeat(5000);
+      const longText = 'あ'.repeat(3000);
       const mockMessageWithLongText = {
         ...mockMessage,
         cleanContent: longText,
@@ -295,9 +295,15 @@ describe('MessageDispatcher', () => {
       const results: MultiTranslationResult[] = [
         {
           status: 'success',
-          translatedText: '你好',
+          translatedText: 'a'.repeat(2000),
           sourceLang: 'ja',
           targetLang: 'zh',
+        },
+        {
+          status: 'success',
+          translatedText: 'b'.repeat(2000),
+          sourceLang: 'ja',
+          targetLang: 'en',
         },
       ];
 
@@ -308,35 +314,10 @@ describe('MessageDispatcher', () => {
 
       // descriptionが4096文字以下に切り詰められていることを確認
       expect(embed.data.description.length).toBeLessThanOrEqual(4096);
-      expect(embed.data.description).toContain('...');
+      // 切り詰めが発生したことを示す警告メッセージが含まれていることを確認
+      expect(embed.data.description).toContain('⚠️ テキストが長すぎるため、一部の翻訳が省略されました');
     });
 
-    it('フィールド値が1024文字を超える場合は切り詰められる', async () => {
-      const mockMessageForField = {
-        ...mockMessage,
-        cleanContent: 'こんにちは',
-      } as any;
-
-      const longTranslation = 'a'.repeat(2000);
-      const results: MultiTranslationResult[] = [
-        {
-          status: 'success',
-          translatedText: longTranslation,
-          sourceLang: 'ja',
-          targetLang: 'zh',
-        },
-      ];
-
-      await dispatcher.sendMultiTranslation(results, mockMessageForField, 'こんにちは');
-
-      const replyArgs = (mockMessageForField.reply as jest.Mock).mock.calls[0][0];
-      const embed = replyArgs.embeds[0];
-
-      // フィールド値が1024文字以下に切り詰められていることを確認
-      const field = embed.data.fields[0];
-      expect(field.value.length).toBeLessThanOrEqual(1024);
-      expect(field.value).toContain('...');
-    });
 
     it('cleanContentが空の場合はoriginalTextにフォールバックする', async () => {
       const mockMessageNoClean = {
@@ -447,7 +428,7 @@ describe('MessageDispatcher', () => {
   });
 
   describe('CJKテキストの改行対策', () => {
-    it('中国語フィールドにゼロ幅スペースが挿入されて改行機会が提供される', async () => {
+    it('中国語翻訳結果にゼロ幅スペースが挿入されて改行機会が提供される', async () => {
       const longChineseText = '呼吸がようやく落ち着き始めた際、フラヴィアの顔が突然アイカの脳裏に浮かんだ。';
       const mockMessageForCJK = {
         ...mockMessage,
@@ -467,12 +448,13 @@ describe('MessageDispatcher', () => {
 
       const replyArgs = (mockMessageForCJK.reply as jest.Mock).mock.calls[0][0];
       const embed = replyArgs.embeds[0];
-      const field = embed.data.fields[0];
 
+      // Description内に中国語翻訳結果が含まれている
+      expect(embed.data.description).toContain('🇨🇳');
       // ゼロ幅スペース（\u200B）が含まれていることを確認
-      expect(field.value).toContain('\u200B');
+      expect(embed.data.description).toContain('\u200B');
       // 元のテキストも含まれていることを確認（ゼロ幅スペースを除去して検証）
-      expect(field.value.replace(/\u200B/g, '')).toContain('呼吸がようやく落ち着き始めた際');
+      expect(embed.data.description.replace(/\u200B/g, '')).toContain('呼吸がようやく落ち着き始めた際');
     });
 
     it('日本語Descriptionにもゼロ幅スペースが挿入される', async () => {
@@ -529,7 +511,7 @@ describe('MessageDispatcher', () => {
       expect(embed.data.description).toContain('终于刺激停止了');
     });
 
-    it('日本語フィールドにもゼロ幅スペースが挿入される', async () => {
+    it('日本語翻訳結果にもゼロ幅スペースが挿入される', async () => {
       const longJapaneseText = 'ついに刺激が止み、フラヴィアのいた部屋で、沈黙が戻った音がした。';
       const mockMessageForCJK = {
         ...mockMessage,
@@ -549,13 +531,14 @@ describe('MessageDispatcher', () => {
 
       const replyArgs = (mockMessageForCJK.reply as jest.Mock).mock.calls[0][0];
       const embed = replyArgs.embeds[0];
-      const field = embed.data.fields[0];
 
+      // Description内に日本語翻訳結果が含まれている
+      expect(embed.data.description).toContain('🇯🇵');
       // ゼロ幅スペース（\u200B）が含まれていることを確認
-      expect(field.value).toContain('\u200B');
+      expect(embed.data.description).toContain('\u200B');
     });
 
-    it('英語フィールドにはゼロ幅スペースが挿入されない', async () => {
+    it('英語翻訳結果にはゼロ幅スペースが挿入されない', async () => {
       const englishText = 'At last, the stimulation ceased, and in the room where a fleeting silence returned, Flavia lay like a corpse.';
       const mockMessageForEN = {
         ...mockMessage,
@@ -575,12 +558,14 @@ describe('MessageDispatcher', () => {
 
       const replyArgs = (mockMessageForEN.reply as jest.Mock).mock.calls[0][0];
       const embed = replyArgs.embeds[0];
-      const field = embed.data.fields[0];
 
-      // ゼロ幅スペースが含まれていないことを確認
-      expect(field.value).not.toContain('\u200B');
-      // 元のテキストは含まれている
-      expect(field.value).toBe(englishText);
+      // Description内に英語翻訳結果が含まれている
+      expect(embed.data.description).toContain('🇺🇸');
+      // 英語の場合、ゼロ幅スペースは挿入されない（スペースで自然に改行される）
+      // Descriptionには原文（日本語）のゼロ幅スペースがあるので、英語部分のみをチェック
+      const descLines = embed.data.description.split('\n');
+      const englishLine = descLines.find((line: string) => line.includes(englishText));
+      expect(englishLine).toBe(englishText); // ゼロ幅スペースなしでそのまま
     });
   });
 });
