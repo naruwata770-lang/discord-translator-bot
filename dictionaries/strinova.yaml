@@ -118,3 +118,15 @@ entries:
       en: Star Clinic
     category: location
     note: ゲーム内の場所
+
+  - id: preton
+    aliases:
+      zh: [普雷顿]
+      ja: [プレイトン]
+      en: [Preton]
+    targets:
+      ja: プレイトン
+      zh: 普雷顿
+      en: Preton
+    category: character
+    note: キャラクター名
