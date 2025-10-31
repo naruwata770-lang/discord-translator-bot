@@ -20,18 +20,6 @@ entries:
     note: ゲーム名の正式名称と略称
 
   # キャラクター名 (Painting Utopia Security)
-  - id: nobunaga
-    aliases:
-      zh: [信]
-      ja: [信長, ノブナガ]
-      en: [Nobunaga]
-    targets:
-      ja: 信長
-      zh: 信
-      en: Nobunaga
-    category: character
-    note: Sentinel, DMR
-
   - id: kokona
     aliases:
       zh: [心夏]
