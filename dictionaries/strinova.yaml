@@ -118,3 +118,15 @@ entries:
       en: Preton
     category: character
     note: キャラクター名
+
+  - id: flavia
+    aliases:
+      zh: [芙拉薇娅]
+      ja: [フラヴィア]
+      en: [Flavia]
+    targets:
+      ja: フラヴィア
+      zh: 芙拉薇娅
+      en: Flavia
+    category: character
+    note: キャラクター名
