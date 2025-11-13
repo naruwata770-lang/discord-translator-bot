@@ -1,4 +1,4 @@
-import { Message, TextChannel } from 'discord.js';
+import { Message, TextChannel, ThreadChannel } from 'discord.js';
 import { CommandParser } from '../commands/commandParser';
 import { TranslationService } from '../services/translationService';
 import { MessageDispatcher } from './messageDispatcher';
@@ -27,8 +27,8 @@ export class MessageHandler {
       return;
     }
 
-    // 対象チャンネル判定
-    if (!this.isTargetChannel(message.channelId)) {
+    // 対象チャンネル判定（スレッドの場合は親チャンネルもチェック）
+    if (!this.isTargetChannel(message)) {
       return;
     }
 
@@ -53,8 +53,31 @@ export class MessageHandler {
     await this.handleAutoTranslation(message);
   }
 
-  private isTargetChannel(channelId: string): boolean {
-    return this.targetChannels.includes(channelId);
+  /**
+   * メッセージが対象チャンネルまたはその派生スレッドからのものかを判定
+   *
+   * 環境変数TARGET_CHANNEL_IDSに親チャンネルIDを設定すれば、
+   * そこから派生したすべてのスレッドでも自動的に翻訳が動作します。
+   *
+   * @param message Discordメッセージ
+   * @returns 対象チャンネル/スレッドの場合true
+   */
+  private isTargetChannel(message: Message): boolean {
+    const channelId = message.channelId;
+
+    // 直接対象チャンネルに含まれているか確認
+    if (this.targetChannels.includes(channelId)) {
+      return true;
+    }
+
+    // スレッドの場合、親チャンネルIDを確認
+    const channel = message.channel;
+    if (channel.isThread()) {
+      const parentId = (channel as ThreadChannel).parentId;
+      return parentId ? this.targetChannels.includes(parentId) : false;
+    }
+
+    return false;
   }
 
   private isAutoTranslateEnabled(channelId: string): boolean {
