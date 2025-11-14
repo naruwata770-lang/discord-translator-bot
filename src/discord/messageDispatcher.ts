@@ -1,17 +1,23 @@
-import { EmbedBuilder, Message, TextChannel } from 'discord.js';
+import { EmbedBuilder, Message } from 'discord.js';
 import { TranslationError } from '../utils/errors';
 import { ErrorCode } from '../types';
 import { MultiTranslationResult } from '../types/multiTranslation';
 import logger from '../utils/logger';
 
+// send()メソッドを持つチャンネルの型
+type ChannelWithSend = {
+  send(content: string): Promise<Message>;
+  send(options: { content: string; allowedMentions?: any }): Promise<Message>;
+};
+
 export class MessageDispatcher {
-  async sendError(channel: TextChannel, error: Error): Promise<void> {
+  async sendError(channel: ChannelWithSend, error: Error): Promise<void> {
     const errorMessage = this.formatError(error);
     await channel.send(errorMessage);
   }
 
   async sendCommandResponse(
-    channel: TextChannel,
+    channel: ChannelWithSend,
     message: string
   ): Promise<void> {
     await channel.send(message);
@@ -48,7 +54,7 @@ export class MessageDispatcher {
           firstError.errorCode
         );
         await this.sendError(
-          originalMessage.channel as TextChannel,
+          originalMessage.channel as ChannelWithSend,
           errorObj
         );
       }
