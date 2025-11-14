@@ -1,10 +1,16 @@
-import { Message, TextChannel, ThreadChannel } from 'discord.js';
+import { Message, ThreadChannel } from 'discord.js';
 import { CommandParser } from '../commands/commandParser';
 import { TranslationService } from '../services/translationService';
 import { MessageDispatcher } from './messageDispatcher';
 import { TranslationError } from '../utils/errors';
 import { ErrorCode } from '../types';
 import logger from '../utils/logger';
+
+// send()メソッドを持つチャンネルの型（messageDispatcherと同じ型）
+type ChannelWithSend = {
+  send(content: string): Promise<Message>;
+  send(options: { content: string; allowedMentions?: any }): Promise<Message>;
+};
 
 export class MessageHandler {
   private autoTranslateEnabled: Map<string, boolean> = new Map();
@@ -56,7 +62,7 @@ export class MessageHandler {
   /**
    * メッセージが対象チャンネルまたはその派生スレッドからのものかを判定
    *
-   * 環境変数TARGET_CHANNEL_IDSに親チャンネルIDを設定すれば、
+   * 環境変数TARGET_CHANNELSに親チャンネルIDを設定すれば、
    * そこから派生したすべてのスレッドでも自動的に翻訳が動作します。
    *
    * @param message Discordメッセージ
@@ -70,8 +76,13 @@ export class MessageHandler {
       return true;
     }
 
-    // スレッドの場合、親チャンネルIDを確認
+    // チャンネルがキャッシュされていない場合は対象外として扱う
     const channel = message.channel;
+    if (!channel) {
+      return false;
+    }
+
+    // スレッドの場合、親チャンネルIDを確認
     if (channel.isThread()) {
       const parentId = (channel as ThreadChannel).parentId;
       return parentId ? this.targetChannels.includes(parentId) : false;
@@ -88,7 +99,11 @@ export class MessageHandler {
     command: { type: string },
     message: Message
   ): Promise<void> {
-    const channel = message.channel as TextChannel;
+    const channel = message.channel as ChannelWithSend | null;
+    if (!channel) {
+      logger.warn('Channel not available for command', { messageId: message.id });
+      return;
+    }
 
     switch (command.type) {
       case 'auto_on':
@@ -155,7 +170,11 @@ export class MessageHandler {
   }
 
   private async handleAutoTranslation(message: Message): Promise<void> {
-    const channel = message.channel as TextChannel;
+    const channel = message.channel as ChannelWithSend | null;
+    if (!channel) {
+      logger.warn('Channel not available for auto-translation', { messageId: message.id });
+      return;
+    }
 
     try {
       logger.info('Starting auto-translation', {
