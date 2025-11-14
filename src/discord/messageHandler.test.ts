@@ -2,7 +2,7 @@ import { MessageHandler } from './messageHandler';
 import { CommandParser } from '../commands/commandParser';
 import { TranslationService } from '../services/translationService';
 import { MessageDispatcher } from './messageDispatcher';
-import { Message, TextChannel, Collection, Attachment, Embed } from 'discord.js';
+import { Message, TextChannel, Collection, Attachment, Embed, ThreadChannel } from 'discord.js';
 import { TranslationResult } from '../types';
 
 jest.mock('../commands/commandParser');
@@ -40,6 +40,7 @@ describe('MessageHandler', () => {
     mockChannel = {
       id: '123456789',
       send: jest.fn().mockResolvedValue(undefined),
+      isThread: () => false, // 通常チャンネルはスレッドではない
     } as any;
 
     mockMessage = {
@@ -268,6 +269,144 @@ describe('MessageHandler', () => {
       await handler.handle(mockMessage);
 
       expect(mockDispatcher.sendError).toHaveBeenCalledWith(mockChannel, error);
+    });
+  });
+
+  describe('スレッド対応', () => {
+    let mockThread: jest.Mocked<ThreadChannel>;
+
+    beforeEach(() => {
+      mockCommandParser.parse.mockReturnValue(null);
+
+      // 対象チャンネルから派生したスレッドをモック
+      mockThread = {
+        id: '987654321', // スレッドID（親チャンネルIDとは異なる）
+        parentId: '123456789', // 親チャンネルID（対象チャンネル）
+        isThread: () => true,
+        send: jest.fn().mockResolvedValue(undefined),
+      } as any;
+    });
+
+    it('対象チャンネルから派生したスレッド内のメッセージを翻訳する', async () => {
+      // スレッド内のメッセージ
+      const threadMessage = {
+        ...mockMessage,
+        channel: mockThread,
+        channelId: '987654321', // スレッドID
+        content: 'スレッドでこんにちは',
+      } as any;
+
+      const multiTranslationResults = [
+        {
+          status: 'success' as const,
+          translatedText: '线程里你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+        {
+          status: 'success' as const,
+          translatedText: 'Hello in thread',
+          sourceLang: 'ja',
+          targetLang: 'en',
+        },
+      ];
+      mockTranslationService.multiTranslate.mockResolvedValue(multiTranslationResults);
+
+      await handler.handle(threadMessage);
+
+      expect(mockTranslationService.multiTranslate).toHaveBeenCalledWith('スレッドでこんにちは');
+      expect(mockDispatcher.sendMultiTranslation).toHaveBeenCalledWith(
+        multiTranslationResults,
+        threadMessage,
+        'スレッドでこんにちは'
+      );
+    });
+
+    it('対象外チャンネルから派生したスレッド内のメッセージは無視する', async () => {
+      // 対象外チャンネルから派生したスレッド
+      const externalThread = {
+        ...mockThread,
+        parentId: '999999999', // 対象外の親チャンネルID
+      };
+
+      const threadMessage = {
+        ...mockMessage,
+        channel: externalThread,
+        channelId: '987654321',
+        content: 'このメッセージは翻訳されない',
+      } as any;
+
+      await handler.handle(threadMessage);
+
+      expect(mockTranslationService.multiTranslate).not.toHaveBeenCalled();
+    });
+
+    it('スレッド内で!auto offコマンドを実行できる', async () => {
+      const threadMessage = {
+        ...mockMessage,
+        channel: mockThread,
+        channelId: '987654321',
+        content: '!auto off',
+      } as any;
+      mockCommandParser.parse.mockReturnValue({ type: 'auto_off' });
+
+      await handler.handle(threadMessage);
+
+      expect(mockDispatcher.sendCommandResponse).toHaveBeenCalledWith(
+        mockThread,
+        '⏸️ 自動翻訳を無効にしました'
+      );
+    });
+
+    it('スレッドごとに自動翻訳のON/OFF状態を個別管理する', async () => {
+      // スレッドで自動翻訳をOFF
+      let threadMessage = {
+        ...mockMessage,
+        channel: mockThread,
+        channelId: '987654321',
+        content: '!auto off',
+      } as any;
+      mockCommandParser.parse.mockReturnValue({ type: 'auto_off' });
+      await handler.handle(threadMessage);
+
+      // スレッド内の通常メッセージは翻訳されない
+      threadMessage = {
+        ...mockMessage,
+        channel: mockThread,
+        channelId: '987654321',
+        content: 'スレッドでこんにちは',
+      } as any;
+      mockCommandParser.parse.mockReturnValue(null);
+      await handler.handle(threadMessage);
+
+      expect(mockTranslationService.multiTranslate).not.toHaveBeenCalled();
+
+      // 親チャンネルではまだONのまま
+      const channelMessage = {
+        ...mockMessage,
+        channel: mockChannel,
+        channelId: '123456789',
+        content: '親チャンネルでこんにちは',
+      } as any;
+
+      mockTranslationService.multiTranslate.mockResolvedValue([
+        {
+          status: 'success' as const,
+          translatedText: '你好',
+          sourceLang: 'ja',
+          targetLang: 'zh',
+        },
+        {
+          status: 'success' as const,
+          translatedText: 'Hello',
+          sourceLang: 'ja',
+          targetLang: 'en',
+        },
+      ]);
+
+      await handler.handle(channelMessage);
+
+      expect(mockTranslationService.multiTranslate).toHaveBeenCalledWith('親チャンネルでこんにちは');
     });
   });
 });
