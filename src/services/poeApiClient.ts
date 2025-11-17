@@ -34,7 +34,7 @@ export class PoeApiClient {
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
         const response = await this.callApi(prompt);
-        return this.extractTranslation(response);
+        return this.extractTranslation(response, text, sourceLang, targetLang);
       } catch (error) {
         lastError = error as TranslationError;
 
@@ -90,14 +90,21 @@ export class PoeApiClient {
     const sourceLanguage = langMap[sourceLang] || sourceLang;
     const targetLanguage = langMap[targetLang] || targetLang;
 
-    let prompt = `Translate the following text from ${sourceLanguage} to ${targetLanguage}. Only output the translation, without any explanation or additional text.`;
+    let prompt = `You are a professional translator. Translate the following text from ${sourceLanguage} to ${targetLanguage}.
+
+IMPORTANT RULES:
+- You MUST translate the text, do NOT return the original text as-is
+- Output ONLY the translated text in ${targetLanguage}
+- Do NOT add explanations, notes, or any additional text
+- Do NOT echo the source text
+- The output must be in ${targetLanguage}, not ${sourceLanguage}`;
 
     // 辞書ヒントがある場合は追加
     if (dictionaryHint && dictionaryHint.trim() !== '') {
       prompt += `\n\n${dictionaryHint}`;
     }
 
-    prompt += `\n\nText: ${text}`;
+    prompt += `\n\nText to translate:\n${text}`;
 
     return prompt;
   }
@@ -169,7 +176,11 @@ export class PoeApiClient {
     }
   }
 
-  private extractTranslation(response: PoeApiResponse): string {
+  /**
+   * APIレスポンスから生のコンテンツを抽出（検証なし）
+   * translateWithAutoDetectで使用
+   */
+  private extractRawContent(response: PoeApiResponse): string {
     if (
       !response.choices ||
       !response.choices[0] ||
@@ -183,6 +194,71 @@ export class PoeApiClient {
     }
 
     return response.choices[0].message.content.trim();
+  }
+
+  /**
+   * APIレスポンスから翻訳結果を抽出し検証
+   * translateで使用
+   */
+  private extractTranslation(
+    response: PoeApiResponse,
+    originalText: string,
+    sourceLang: string,
+    targetLang: string
+  ): string {
+    const result = this.extractRawContent(response);
+
+    // 検証1: 元テキストと翻訳結果が同一の場合はエラー
+    if (result === originalText) {
+      logger.warn('Translation validation failed: output is identical to input', {
+        sourceLang,
+        targetLang,
+        textLength: originalText.length,
+      });
+      throw new TranslationError(
+        'Translation failed: output is identical to input',
+        ErrorCode.API_ERROR
+      );
+    }
+
+    // 検証2: ターゲット言語の文字が含まれているか
+    if (targetLang === 'ja') {
+      // 日本語ならひらがな・カタカナ・漢字のいずれかが含まれるべき
+      // 固有名詞（"東京"など）や短語の場合、漢字のみの訳文も許容
+      const hasJapanese = /[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/.test(result);
+      if (!hasJapanese) {
+        logger.warn('Translation validation failed: output does not contain Japanese characters', {
+          sourceLang,
+          targetLang,
+        });
+        throw new TranslationError(
+          'Translation failed: output does not contain Japanese characters',
+          ErrorCode.API_ERROR
+        );
+      }
+    } else if (targetLang === 'zh') {
+      // 中国語なら漢字または中国語句読点が含まれるべき
+      const hasChinese = /[\u4e00-\u9faf，。！？]/.test(result);
+      if (!hasChinese) {
+        logger.warn('Translation validation failed: output does not contain Chinese characters', {
+          sourceLang,
+          targetLang,
+        });
+        throw new TranslationError(
+          'Translation failed: output does not contain Chinese characters',
+          ErrorCode.API_ERROR
+        );
+      }
+    }
+
+    logger.debug('Translation validation passed', {
+      sourceLang,
+      targetLang,
+      inputLength: originalText.length,
+      outputLength: result.length,
+    });
+
+    return result;
   }
 
   private shouldNotRetry(error: TranslationError): boolean {
@@ -297,7 +373,7 @@ Output: これは壊れました`;
       }
 
       const data = (await response.json()) as PoeApiResponse;
-      const rawContent = this.extractTranslation(data);
+      const rawContent = this.extractRawContent(data);
 
       // バリデーション: 既知のフィラー文をスキップして翻訳結果を抽出
       const lines = rawContent.trim().split('\n');

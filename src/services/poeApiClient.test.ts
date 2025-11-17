@@ -53,7 +53,7 @@ describe('PoeApiClient', () => {
       );
     });
 
-    it('プロンプトに言語情報が含まれる', async () => {
+    it('プロンプトに言語情報と重要なルールが含まれる', async () => {
       const mockResponse = {
         choices: [{ message: { content: 'Hello' } }],
       };
@@ -72,6 +72,8 @@ describe('PoeApiClient', () => {
       expect(body.messages[0].content).toContain('Japanese');
       expect(body.messages[0].content).toContain('English');
       expect(body.messages[0].content).toContain('こんにちは');
+      expect(body.messages[0].content).toContain('IMPORTANT RULES');
+      expect(body.messages[0].content).toContain('do NOT return the original text');
     });
 
     it('辞書ヒント付きの翻訳が成功する', async () => {
@@ -253,12 +255,12 @@ describe('PoeApiClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: 'Success' } }] }),
+          json: async () => ({ choices: [{ message: { content: '成功了' } }] }), // 中国語で成功
         });
 
-      const result = await client.translate('test', 'ja', 'zh');
+      const result = await client.translate('テスト', 'ja', 'zh');
 
-      expect(result).toBe('Success');
+      expect(result).toBe('成功了');
       expect(global.fetch).toHaveBeenCalledTimes(3);
     });
 
@@ -305,14 +307,146 @@ describe('PoeApiClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: 'Success' } }] }),
+          json: async () => ({ choices: [{ message: { content: '成功了' } }] }), // 中国語で成功
         });
 
-      const result = await client.translate('test', 'ja', 'zh');
+      const result = await client.translate('テスト', 'ja', 'zh');
 
-      expect(result).toBe('Success');
+      expect(result).toBe('成功了');
       // 初回 + 2回リトライ = 3回
       expect(global.fetch).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('翻訳結果の検証', () => {
+    it('元テキストと翻訳結果が同一の場合はエラーを投げる', async () => {
+      const originalText = '你好世界';
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: '你好世界', // 元テキストと同じ
+            },
+          },
+        ],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      await expect(
+        client.translate(originalText, 'zh', 'ja')
+      ).rejects.toThrow('Translation failed: output is identical to input');
+    });
+
+    it('日本語翻訳時に日本語文字が全く含まれない場合はエラーを投げる', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: 'English only text', // 英語のみ（日本語文字なし）
+            },
+          },
+        ],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      await expect(
+        client.translate('你好世界', 'zh', 'ja')
+      ).rejects.toThrow('Translation failed: output does not contain Japanese characters');
+    });
+
+    it('中国語翻訳時に中国語文字が含まれない場合はエラーを投げる', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: 'English text', // 英語（中国語なし、元テキストとも異なる）
+            },
+          },
+        ],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      await expect(
+        client.translate('Hello World', 'en', 'zh')
+      ).rejects.toThrow('Translation failed: output does not contain Chinese characters');
+    });
+
+    it('日本語翻訳で漢字+ひらがな・カタカナがあれば成功', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: '世界こんにちは', // 漢字+ひらがな
+            },
+          },
+        ],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      const result = await client.translate('你好世界', 'zh', 'ja');
+      expect(result).toBe('世界こんにちは');
+    });
+
+    it('日本語翻訳で漢字のみでも成功（固有名詞など）', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: '東京', // 漢字のみ
+            },
+          },
+        ],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      const result = await client.translate('Tokyo', 'en', 'ja');
+      expect(result).toBe('東京');
+    });
+
+    it('中国語翻訳で漢字が含まれていれば成功', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: '你好世界',
+            },
+          },
+        ],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+      });
+
+      const result = await client.translate('こんにちは世界', 'ja', 'zh');
+      expect(result).toBe('你好世界');
     });
   });
 

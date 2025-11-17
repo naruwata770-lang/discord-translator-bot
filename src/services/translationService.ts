@@ -281,12 +281,25 @@ export class TranslationService {
         // 3.2 翻訳実行（辞書ヒントを含めて直接poeClientを呼び出す）
         await this.rateLimiter.acquire();
         try {
+          logger.debug('Multi-translate request', {
+            sourceLang,
+            targetLang: target.lang,
+            textLength: text.length,
+            hasDictionaryHint: !!dictionaryHint,
+          });
+
           const translatedText = await this.poeClient.translate(
             text,
             sourceLang,
             target.lang,
             dictionaryHint
           );
+
+          logger.debug('Multi-translate result', {
+            sourceLang,
+            targetLang: target.lang,
+            outputLength: translatedText.length,
+          });
 
           // 3.3 成功結果を返す
           return {
