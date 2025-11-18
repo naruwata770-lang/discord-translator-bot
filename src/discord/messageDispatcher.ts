@@ -318,6 +318,8 @@ export class MessageDispatcher {
           return '⚠️ 認証エラーが発生しました。管理者にお問い合わせください。';
         case ErrorCode.API_ERROR:
           return '⚠️ 翻訳サービスでエラーが発生しました。しばらくしてから再度お試しください。';
+        case ErrorCode.VALIDATION_ERROR:
+          return '⚠️ AIが元のテキストをそのまま返しました。別の表現で試してください。';
         case ErrorCode.INVALID_INPUT:
           return '⚠️ 入力が正しくありません。テキストを確認してください。';
         default:
