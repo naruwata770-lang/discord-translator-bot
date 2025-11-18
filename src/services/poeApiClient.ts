@@ -26,13 +26,25 @@ export class PoeApiClient {
     targetLang: string,
     dictionaryHint?: string
   ): Promise<string> {
-    const prompt = this.buildPrompt(text, sourceLang, targetLang, dictionaryHint);
-
     let lastError: TranslationError | null = null;
+    let useStrongerPrompt = false;
 
     // リトライループ（最大3回）
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
+        // 前回が検証エラーの場合のみ強化プロンプトを使用
+        let prompt: string;
+        if (useStrongerPrompt) {
+          prompt = this.buildStrongerPrompt(text, sourceLang, targetLang, dictionaryHint);
+          logger.info('Using stronger prompt for validation error retry', {
+            attempt: attempt + 1,
+            sourceLang,
+            targetLang,
+          });
+        } else {
+          prompt = this.buildPrompt(text, sourceLang, targetLang, dictionaryHint);
+        }
+
         const response = await this.callApi(prompt);
         return this.extractTranslation(response, text, sourceLang, targetLang);
       } catch (error) {
@@ -48,6 +60,11 @@ export class PoeApiClient {
           throw lastError;
         }
 
+        // 検証エラーの場合は次回強化プロンプトを使用
+        if (lastError.code === ErrorCode.VALIDATION_ERROR) {
+          useStrongerPrompt = true;
+        }
+
         // 429エラーの場合はRetry-Afterヘッダーを尊重
         let delay: number;
         if (
@@ -58,6 +75,14 @@ export class PoeApiClient {
           logger.warn(`Rate limit hit, retrying after ${delay}ms`, {
             attempt: attempt + 1,
             maxRetries: this.maxRetries,
+          });
+        } else if (lastError.code === ErrorCode.VALIDATION_ERROR) {
+          // 検証エラーの場合は短い待機時間
+          delay = 500;
+          logger.warn(`Validation error, retrying with stronger prompt in ${delay}ms`, {
+            attempt: attempt + 1,
+            maxRetries: this.maxRetries,
+            errorMessage: lastError.message,
           });
         } else {
           // 指数バックオフで待機
@@ -105,6 +130,41 @@ IMPORTANT RULES:
     }
 
     prompt += `\n\nText to translate:\n${text}`;
+
+    return prompt;
+  }
+
+  private buildStrongerPrompt(
+    text: string,
+    sourceLang: string,
+    targetLang: string,
+    dictionaryHint?: string
+  ): string {
+    const langMap: Record<string, string> = {
+      ja: 'Japanese',
+      zh: 'Chinese',
+      en: 'English',
+    };
+
+    const sourceLanguage = langMap[sourceLang] || sourceLang;
+    const targetLanguage = langMap[targetLang] || targetLang;
+
+    let prompt = `You are a professional translator. This is CRITICAL.
+
+STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
+1. You MUST translate from ${sourceLanguage} to ${targetLanguage}
+2. NEVER return the original text unchanged
+3. Output MUST be in ${targetLanguage} ONLY
+4. Do NOT include any explanations or notes
+5. Do NOT echo the source text
+6. The translation MUST contain ${targetLanguage} characters`;
+
+    // 辞書ヒントがある場合は追加
+    if (dictionaryHint && dictionaryHint.trim() !== '') {
+      prompt += `\n\n${dictionaryHint}`;
+    }
+
+    prompt += `\n\nNow translate this ${sourceLanguage} text to ${targetLanguage}:\n${text}`;
 
     return prompt;
   }
@@ -217,7 +277,7 @@ IMPORTANT RULES:
       });
       throw new TranslationError(
         'Translation failed: output is identical to input',
-        ErrorCode.API_ERROR
+        ErrorCode.VALIDATION_ERROR
       );
     }
 
@@ -233,7 +293,7 @@ IMPORTANT RULES:
         });
         throw new TranslationError(
           'Translation failed: output does not contain Japanese characters',
-          ErrorCode.API_ERROR
+          ErrorCode.VALIDATION_ERROR
         );
       }
     } else if (targetLang === 'zh') {
@@ -246,7 +306,7 @@ IMPORTANT RULES:
         });
         throw new TranslationError(
           'Translation failed: output does not contain Chinese characters',
-          ErrorCode.API_ERROR
+          ErrorCode.VALIDATION_ERROR
         );
       }
     }
@@ -263,7 +323,7 @@ IMPORTANT RULES:
 
   private shouldNotRetry(error: TranslationError): boolean {
     // 認証エラー、無効な入力、API形式エラーはリトライしない
-    // RATE_LIMITは除外してリトライ可能にする（Retry-Afterを尊重）
+    // VALIDATION_ERRORとRATE_LIMITはリトライ可能（プロンプト変更やRetry-Afterを尊重）
     return [
       ErrorCode.AUTH_ERROR,
       ErrorCode.INVALID_INPUT,
