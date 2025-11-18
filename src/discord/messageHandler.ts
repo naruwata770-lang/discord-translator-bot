@@ -217,10 +217,27 @@ export class MessageHandler {
 
       logger.error('Translation failed', {
         messageId: message.id,
-        error,
+        error: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+          ...(error instanceof TranslationError && { code: error.code }),
+        } : error,
       });
 
-      await this.dispatcher.sendError(channel, error as Error);
+      try {
+        await this.dispatcher.sendError(channel, error as Error);
+      } catch (sendError) {
+        logger.error('Failed to send error message to Discord', {
+          messageId: message.id,
+          originalError: error instanceof Error ? error.message : String(error),
+          sendError: sendError instanceof Error ? {
+            name: sendError.name,
+            message: sendError.message,
+            stack: sendError.stack,
+          } : sendError,
+        });
+      }
     }
   }
 }

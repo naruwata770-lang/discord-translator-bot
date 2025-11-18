@@ -42,7 +42,13 @@ export class DiscordClient {
       } catch (error) {
         logger.error('Error handling message', {
           messageId: message.id,
-          error,
+          channelId: message.channelId,
+          content: message.content.substring(0, 50), // 最初の50文字のみ
+          error: error instanceof Error ? {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+          } : error,
         });
       }
     });
