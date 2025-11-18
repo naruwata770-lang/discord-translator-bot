@@ -73,7 +73,16 @@ export class MessageDispatcher {
           allowedMentions: { parse: [], repliedUser: false },
         });
       } catch (error) {
-        logger.error('Failed to send multi-translation', { error });
+        logger.error('Failed to send multi-translation', {
+          messageId: originalMessage.id,
+          messageLength: message.length,
+          resultsCount: results.length,
+          error: error instanceof Error ? {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+          } : error,
+        });
         throw error;
       }
     } else {
@@ -81,7 +90,15 @@ export class MessageDispatcher {
       try {
         await this.sendSplitMessages(results, originalMessage, originalText);
       } catch (error) {
-        logger.error('Failed to send split messages', { error });
+        logger.error('Failed to send split messages', {
+          messageId: originalMessage.id,
+          resultsCount: results.length,
+          error: error instanceof Error ? {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+          } : error,
+        });
         throw error;
       }
     }
