@@ -55,11 +55,30 @@ export class DiscordClient {
 
     // エラーイベント
     this.client.on(Events.Error, (error) => {
-      logger.error('Discord client error', { error });
+      logger.error('Discord client error', {
+        error: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        } : error,
+      });
     });
 
     // ログイン
-    await this.client.login(this.token);
+    logger.info('Attempting to login to Discord');
+    try {
+      await this.client.login(this.token);
+      logger.info('Discord login successful');
+    } catch (error) {
+      logger.error('Discord login failed', {
+        error: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        } : error,
+      });
+      throw error;
+    }
   }
 
   async shutdown(): Promise<void> {

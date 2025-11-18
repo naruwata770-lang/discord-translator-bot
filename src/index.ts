@@ -11,9 +11,38 @@ import config from './config/config';
 import logger from './utils/logger';
 import * as path from 'path';
 
+// 未処理の例外をキャッチ
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught exception', {
+    error: {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    },
+  });
+  process.exit(1);
+});
+
+// 未処理のPromise rejectionsをキャッチ
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled rejection', {
+    reason: reason instanceof Error ? {
+      name: reason.name,
+      message: reason.message,
+      stack: reason.stack,
+    } : reason,
+    promise: String(promise),
+  });
+  process.exit(1);
+});
+
 async function main() {
   try {
-    logger.info('Starting Discord translation bot');
+    logger.info('Starting Discord translation bot', {
+      nodeVersion: process.version,
+      platform: process.platform,
+      arch: process.arch,
+    });
 
     // 依存関係の初期化
     const languageDetector = new LanguageDetector();
@@ -78,7 +107,13 @@ async function main() {
 
     logger.info('Discord translation bot started successfully');
   } catch (error) {
-    logger.error('Failed to start bot', { error });
+    logger.error('Failed to start bot', {
+      error: error instanceof Error ? {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      } : error,
+    });
     process.exit(1);
   }
 }
