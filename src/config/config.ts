@@ -12,9 +12,28 @@ export class ConfigStore {
   private constructor() {
     try {
       this.config = envSchema.parse(process.env);
-      logger.info('Configuration loaded successfully');
+      logger.info('Configuration loaded successfully', {
+        nodeEnv: this.config.NODE_ENV,
+        logLevel: this.config.LOG_LEVEL,
+        hasDiscordToken: !!this.config.DISCORD_BOT_TOKEN,
+        hasPoeApiKey: !!this.config.POE_API_KEY,
+        poeModel: this.config.POE_MODEL_NAME,
+        targetChannelsCount: this.config.TARGET_CHANNELS?.split(',').length || 0,
+      });
     } catch (error) {
-      logger.error('Configuration validation failed', { error });
+      logger.error('Configuration validation failed', {
+        error: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        } : error,
+        availableEnvKeys: Object.keys(process.env).filter(key =>
+          key.startsWith('DISCORD_') ||
+          key.startsWith('POE_') ||
+          key.startsWith('NODE_') ||
+          key.startsWith('LOG_')
+        ),
+      });
       throw error;
     }
   }
