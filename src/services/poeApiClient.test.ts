@@ -318,8 +318,224 @@ describe('PoeApiClient', () => {
     });
   });
 
+  describe('検証エラー時のリトライ', () => {
+    it('検証エラーが発生した場合、プロンプトを変えて最大2回リトライする', async () => {
+      // 1回目: 検証失敗（元テキストと同じ）
+      // 2回目: 検証失敗（元テキストと同じ）
+      // 3回目: 成功
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+        });
+
+      const result = await client.translate('你好世界', 'zh', 'ja');
+
+      expect(result).toBe('こんにちは世界');
+      // 1回目（通常プロンプト） + 2回目（強化プロンプト） + 3回目（成功） = 3回
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('検証エラーで2回リトライしても失敗した場合はエラーを投げる', async () => {
+      // 4回とも検証失敗（maxRetries=3なので、初回+3回リトライ=4回）
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+        });
+
+      await expect(
+        client.translate('你好世界', 'zh', 'ja')
+      ).rejects.toThrow('Translation failed: output is identical to input');
+
+      // 最大4回試行（初回 + 3回リトライ）
+      expect(global.fetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('1回目で成功した場合はリトライしない', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+      });
+
+      const result = await client.translate('你好世界', 'zh', 'ja');
+
+      expect(result).toBe('こんにちは世界');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('プロンプトバリエーション', () => {
+    it('2回目のリトライ時には強化プロンプトが使用される', async () => {
+      // 1回目: 検証失敗
+      // 2回目: 成功
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+        });
+
+      const result = await client.translate('你好世界', 'zh', 'ja');
+
+      expect(result).toBe('こんにちは世界');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+
+      // 2回目のプロンプトには"STRICT REQUIREMENTS"が含まれている
+      const secondCallArgs = (global.fetch as jest.Mock).mock.calls[1][1];
+      const secondBody = JSON.parse(secondCallArgs.body);
+      expect(secondBody.messages[0].content).toContain('STRICT REQUIREMENTS');
+    });
+
+    it('ネットワークエラーのリトライでは通常プロンプトを使い続ける', async () => {
+      // 1回目: ネットワークエラー
+      // 2回目: 成功
+      (global.fetch as jest.Mock)
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+        });
+
+      const result = await client.translate('你好世界', 'zh', 'ja');
+
+      expect(result).toBe('こんにちは世界');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+
+      // 2回目のプロンプトにも"STRICT REQUIREMENTS"は含まれない（通常プロンプト）
+      const secondCallArgs = (global.fetch as jest.Mock).mock.calls[1][1];
+      const secondBody = JSON.parse(secondCallArgs.body);
+      expect(secondBody.messages[0].content).not.toContain('STRICT REQUIREMENTS');
+      expect(secondBody.messages[0].content).toContain('IMPORTANT RULES');
+    });
+
+    it('検証エラー→ネットワークエラー→成功でも強化プロンプトを使う', async () => {
+      // 1回目: 検証失敗
+      // 2回目: ネットワークエラー（強化プロンプト使用）
+      // 3回目: 成功（強化プロンプト継続）
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+        })
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+        });
+
+      const result = await client.translate('你好世界', 'zh', 'ja');
+
+      expect(result).toBe('こんにちは世界');
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+
+      // 2回目・3回目ともに強化プロンプト
+      const secondCallArgs = (global.fetch as jest.Mock).mock.calls[1][1];
+      const secondBody = JSON.parse(secondCallArgs.body);
+      expect(secondBody.messages[0].content).toContain('STRICT REQUIREMENTS');
+
+      const thirdCallArgs = (global.fetch as jest.Mock).mock.calls[2][1];
+      const thirdBody = JSON.parse(thirdCallArgs.body);
+      expect(thirdBody.messages[0].content).toContain('STRICT REQUIREMENTS');
+    });
+  });
+
+  describe('リトライ時の待機時間', () => {
+    it('検証エラー時は500msの短い待機時間でリトライする', async () => {
+      // sleepモックを解除して実際の待機時間を測定
+      jest.restoreAllMocks();
+
+      // 1回目: 検証失敗
+      // 2回目: 成功
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+        });
+
+      const startTime = Date.now();
+      const result = await client.translate('你好世界', 'zh', 'ja');
+      const elapsed = Date.now() - startTime;
+
+      expect(result).toBe('こんにちは世界');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+
+      // 500ms程度の待機時間（誤差を考慮して400-700msの範囲）
+      expect(elapsed).toBeGreaterThanOrEqual(400);
+      expect(elapsed).toBeLessThan(1500);
+    });
+
+    it('ネットワークエラー時は指数バックオフでリトライする', async () => {
+      // sleepモックを解除して実際の待機時間を測定
+      jest.restoreAllMocks();
+
+      // 1回目: ネットワークエラー
+      // 2回目: 成功
+      (global.fetch as jest.Mock)
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+        });
+
+      const startTime = Date.now();
+      const result = await client.translate('你好世界', 'zh', 'ja');
+      const elapsed = Date.now() - startTime;
+
+      expect(result).toBe('こんにちは世界');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+
+      // 指数バックオフ: 1000ms程度の待機時間（誤差を考慮して900-1500msの範囲）
+      expect(elapsed).toBeGreaterThanOrEqual(900);
+      expect(elapsed).toBeLessThan(2000);
+    });
+  });
+
   describe('翻訳結果の検証', () => {
-    it('元テキストと翻訳結果が同一の場合はエラーを投げる', async () => {
+    it('元テキストと翻訳結果が同一の場合はVALIDATION_ERRORを投げる', async () => {
       const originalText = '你好世界';
       const mockResponse = {
         choices: [
@@ -331,7 +547,7 @@ describe('PoeApiClient', () => {
         ],
       };
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         status: 200,
         json: async () => mockResponse,
@@ -353,11 +569,28 @@ describe('PoeApiClient', () => {
         ],
       };
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => mockResponse,
-      });
+      // maxRetries=3なので、4回とも同じ英語のレスポンスを返す
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse,
+        });
 
       await expect(
         client.translate('你好世界', 'zh', 'ja')
@@ -375,11 +608,28 @@ describe('PoeApiClient', () => {
         ],
       };
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => mockResponse,
-      });
+      // maxRetries=3なので、4回とも同じ英語のレスポンスを返す
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse,
+        });
 
       await expect(
         client.translate('Hello World', 'en', 'zh')
