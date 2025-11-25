@@ -865,11 +865,14 @@ describe('PoeApiClient', () => {
         choices: [{ message: { content: 'This is just English text' } }],
       };
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => mockResponse,
-      });
+      // リトライ4回分（初回+リトライ3回）すべて同じエラーを返す
+      for (let i = 0; i <= 3; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse,
+        });
+      }
 
       await expect(
         client.translateWithAutoDetect('こんにちは')
@@ -881,11 +884,14 @@ describe('PoeApiClient', () => {
         choices: [{ message: { content: '   \n\n   ' } }],
       };
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => mockResponse,
-      });
+      // リトライ4回分（初回+リトライ3回）すべて同じエラーを返す
+      for (let i = 0; i <= 3; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse,
+        });
+      }
 
       await expect(
         client.translateWithAutoDetect('こんにちは')
@@ -893,13 +899,16 @@ describe('PoeApiClient', () => {
     });
 
     it('should handle timeout', async () => {
-      (global.fetch as jest.Mock).mockRejectedValueOnce(
-        new Error('Request timeout')
-      );
+      // リトライ4回分（初回+リトライ3回）すべて同じエラーを返す
+      for (let i = 0; i <= 3; i++) {
+        (global.fetch as jest.Mock).mockRejectedValueOnce(
+          new Error('Request timeout')
+        );
+      }
 
       await expect(
         client.translateWithAutoDetect('こんにちは')
-      ).rejects.toThrow('Network error during AI detection');
+      ).rejects.toThrow('Network error');
     });
 
     it('should handle multi-paragraph translation', async () => {
@@ -971,6 +980,179 @@ describe('PoeApiClient', () => {
 
       // 辞書関連の内容がプロンプトに含まれていないことを確認
       expect(body.messages[1].content).not.toContain('dictionary');
+    });
+  });
+
+  describe('translateWithAutoDetect リトライ機能', () => {
+    it('ValidationErrorで最大3回リトライして成功する', async () => {
+      // 1回目・2回目: 英語のみ（ValidationError）
+      // 3回目: 成功
+      const failResponse = {
+        choices: [{ message: { content: 'Just English text' } }],
+      };
+      const successResponse = {
+        choices: [{ message: { content: '你好' } }],
+      };
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => failResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => failResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => successResponse,
+        });
+
+      const result = await client.translateWithAutoDetect('こんにちは');
+      expect(result).toBe('你好');
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('ネットワークエラーでリトライして成功する', async () => {
+      const successResponse = {
+        choices: [{ message: { content: '你好' } }],
+      };
+
+      // 1回目: ネットワークエラー
+      // 2回目: 成功
+      (global.fetch as jest.Mock)
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => successResponse,
+        });
+
+      const result = await client.translateWithAutoDetect('こんにちは');
+      expect(result).toBe('你好');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('500エラーでリトライして成功する', async () => {
+      const successResponse = {
+        choices: [{ message: { content: '你好' } }],
+      };
+
+      // 1回目: 500エラー
+      // 2回目: 成功
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+          text: async () => 'Server Error',
+          headers: new Map(),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => successResponse,
+        });
+
+      const result = await client.translateWithAutoDetect('こんにちは');
+      expect(result).toBe('你好');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('ValidationErrorで強化プロンプトを使用する', async () => {
+      // 1回目: 英語のみ（ValidationError）→ 強化プロンプト使用
+      // 2回目: 成功
+      const failResponse = {
+        choices: [{ message: { content: 'English only' } }],
+      };
+      const successResponse = {
+        choices: [{ message: { content: '你好' } }],
+      };
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => failResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => successResponse,
+        });
+
+      await client.translateWithAutoDetect('こんにちは');
+
+      // 2回目の呼び出しで強化プロンプトが使用されていることを確認
+      const secondCall = (global.fetch as jest.Mock).mock.calls[1];
+      const body = JSON.parse(secondCall[1].body);
+      expect(body.messages[0].content).toContain('STRICT REQUIREMENTS');
+      expect(body.messages[1].content).toContain('CRITICAL');
+    });
+
+    it('UnsupportedLanguageErrorはリトライしない', async () => {
+      const unsupportedResponse = {
+        choices: [{ message: { content: 'UNSUPPORTED_LANGUAGE' } }],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => unsupportedResponse,
+      });
+
+      await expect(
+        client.translateWithAutoDetect('Hello World')
+      ).rejects.toThrow('Language not supported');
+
+      // 1回のみ呼び出し（リトライなし）
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('認証エラーはリトライしない', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        text: async () => 'Unauthorized',
+        headers: new Map(),
+      });
+
+      await expect(
+        client.translateWithAutoDetect('こんにちは')
+      ).rejects.toThrow('Poe API Error: 401');
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('元テキストと同一の場合もリトライする', async () => {
+      // 1回目: 元テキストと同一（ValidationError）
+      // 2回目: 成功
+      const sameTextResponse = {
+        choices: [{ message: { content: 'こんにちは' } }],
+      };
+      const successResponse = {
+        choices: [{ message: { content: '你好' } }],
+      };
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => sameTextResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => successResponse,
+        });
+
+      const result = await client.translateWithAutoDetect('こんにちは');
+      expect(result).toBe('你好');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
     });
   });
 });
