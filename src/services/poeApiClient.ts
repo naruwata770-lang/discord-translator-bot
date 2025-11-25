@@ -352,11 +352,137 @@ STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
    * @throws {TranslationError} API呼び出しが失敗した場合
    */
   async translateWithAutoDetect(text: string, dictionaryHint?: string): Promise<string> {
-    const systemMessage = `You are a precise translation engine for Japanese and Chinese languages.
+    let lastError: Error | null = null;
+    let useStrongerPrompt = false;
+
+    // リトライループ（最大3回）
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      try {
+        const result = await this.executeAutoDetectTranslation(
+          text,
+          dictionaryHint,
+          useStrongerPrompt
+        );
+        return result;
+      } catch (error) {
+        lastError = error as Error;
+
+        // UnsupportedLanguageErrorはリトライしない（言語が未対応なのは確定）
+        if (
+          error instanceof Error &&
+          error.name === 'UnsupportedLanguageError'
+        ) {
+          throw error;
+        }
+
+        // リトライしないエラー（認証エラー、無効入力、API形式エラー）
+        if (error instanceof TranslationError && this.shouldNotRetry(error)) {
+          throw error;
+        }
+
+        // 最後の試行でエラーが発生した場合
+        if (attempt === this.maxRetries) {
+          break;
+        }
+
+        // ValidationErrorの場合は次回強化プロンプトを使用
+        if (
+          error instanceof Error &&
+          (error.name === 'ValidationError' ||
+            (error instanceof TranslationError &&
+              error.code === ErrorCode.VALIDATION_ERROR))
+        ) {
+          useStrongerPrompt = true;
+        }
+
+        // 待機時間を決定
+        let delay: number;
+        if (
+          error instanceof TranslationError &&
+          error.code === ErrorCode.RATE_LIMIT &&
+          (error as any).retryAfter
+        ) {
+          delay = (error as any).retryAfter * 1000;
+          logger.warn(`Rate limit hit in autoDetect, retrying after ${delay}ms`, {
+            attempt: attempt + 1,
+            maxRetries: this.maxRetries,
+          });
+        } else if (
+          error instanceof Error &&
+          (error.name === 'ValidationError' ||
+            (error instanceof TranslationError &&
+              error.code === ErrorCode.VALIDATION_ERROR))
+        ) {
+          delay = 500;
+          logger.warn(`Validation error in autoDetect, retrying with stronger prompt in ${delay}ms`, {
+            attempt: attempt + 1,
+            maxRetries: this.maxRetries,
+            errorMessage: error.message,
+          });
+        } else {
+          delay = this.calculateBackoff(attempt);
+          logger.warn(`API call failed in autoDetect, retrying in ${delay}ms`, {
+            attempt: attempt + 1,
+            maxRetries: this.maxRetries,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        await this.sleep(delay);
+      }
+    }
+
+    // 最後のエラーを再スロー（TranslationErrorでない場合はラップ）
+    if (lastError instanceof TranslationError) {
+      throw lastError;
+    }
+    if (
+      lastError instanceof Error &&
+      (lastError.name === 'ValidationError' ||
+        lastError.name === 'UnsupportedLanguageError')
+    ) {
+      throw lastError;
+    }
+    throw new TranslationError(
+      'Network error during AI detection',
+      ErrorCode.NETWORK_ERROR,
+      lastError as Error
+    );
+  }
+
+  /**
+   * AI言語検出 + 翻訳の実際の実行（リトライなし）
+   */
+  private async executeAutoDetectTranslation(
+    text: string,
+    dictionaryHint?: string,
+    useStrongerPrompt: boolean = false
+  ): Promise<string> {
+    const systemMessage = useStrongerPrompt
+      ? `You are a precise translation engine. This is CRITICAL.
+STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
+1. Detect if input is Japanese or Chinese
+2. Japanese → translate to Chinese (Simplified)
+3. Chinese → translate to Japanese
+4. Other languages → output exactly "UNSUPPORTED_LANGUAGE"
+5. NEVER return the original text unchanged
+6. Output MUST contain Japanese or Chinese characters`
+      : `You are a precise translation engine for Japanese and Chinese languages.
 Your task is to detect the input language and translate accordingly.
 You must follow the output format exactly.`;
 
-    let userPrompt = `Detect the language and translate:
+    let userPrompt = useStrongerPrompt
+      ? `CRITICAL: Detect language and translate:
+- Japanese → Chinese (Simplified)
+- Chinese → Japanese
+- Other → "UNSUPPORTED_LANGUAGE"
+
+STRICT RULES:
+1. Output ONLY the translation, no explanations
+2. NEVER echo or return the source text
+3. No markdown, quotes, or formatting
+4. Output MUST be different from input`
+      : `Detect the language and translate:
 - Japanese → Chinese (Simplified)
 - Chinese → Japanese
 - Other languages → output exactly "UNSUPPORTED_LANGUAGE"
@@ -365,7 +491,9 @@ Rules:
 1. Output ONLY the translation text, no explanations
 2. Do not echo the source text
 3. Do not add markdown, quotes, or formatting
-4. For mixed-language text, translate only JP/ZH parts
+4. For mixed-language text, translate only JP/ZH parts`;
+
+    userPrompt += `
 
 Examples:
 
@@ -391,158 +519,157 @@ Output: これは壊れました`;
 
     userPrompt += `\n\nNow translate:\n${text}`;
 
-    try {
-      const response = await fetch(this.endpointUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: this.modelName,
-          messages: [
-            { role: 'system', content: systemMessage },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 0,
-          max_tokens: 1000,
-        }),
+    if (useStrongerPrompt) {
+      logger.info('Using stronger prompt for autoDetect validation error retry', {
+        textLength: text.length,
       });
+    }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        const statusCode = response.status;
+    const response = await fetch(this.endpointUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: [
+          { role: 'system', content: systemMessage },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0,
+        max_tokens: 1000,
+      }),
+    });
 
-        let errorCode: ErrorCode;
-        if (statusCode === 401 || statusCode === 403) {
-          errorCode = ErrorCode.AUTH_ERROR;
-        } else if (statusCode === 400) {
-          errorCode = ErrorCode.INVALID_INPUT;
-        } else if (statusCode === 429) {
-          errorCode = ErrorCode.RATE_LIMIT;
-        } else if (statusCode >= 500) {
-          errorCode = ErrorCode.NETWORK_ERROR;
-        } else {
-          errorCode = ErrorCode.API_ERROR;
-        }
+    if (!response.ok) {
+      const errorText = await response.text();
+      const statusCode = response.status;
 
-        throw new TranslationError(
-          `Poe API Error: ${statusCode} ${response.statusText} - ${errorText}`,
-          errorCode
-        );
+      let errorCode: ErrorCode;
+      if (statusCode === 401 || statusCode === 403) {
+        errorCode = ErrorCode.AUTH_ERROR;
+      } else if (statusCode === 400) {
+        errorCode = ErrorCode.INVALID_INPUT;
+      } else if (statusCode === 429) {
+        errorCode = ErrorCode.RATE_LIMIT;
+      } else if (statusCode >= 500) {
+        errorCode = ErrorCode.NETWORK_ERROR;
+      } else {
+        errorCode = ErrorCode.API_ERROR;
       }
 
-      const data = (await response.json()) as PoeApiResponse;
-      const rawContent = this.extractRawContent(data);
-
-      // バリデーション: 既知のフィラー文をスキップして翻訳結果を抽出
-      const lines = rawContent.trim().split('\n');
-
-      // フィラー文のパターン（英語の説明文など）
-      const FILLER_PATTERNS = [
-        /^(Sure|Here|Okay|Alright|OK)[,:\s]/i,
-        /^(the\s+)?(Translation|Translated|Result)[:\s]/i,
-        /^(The translation is|Here's the translation|is the translation|is the result)[:\s]/i,
-        /^(here is|here's|this is|is the)[:\s]/i,
-      ];
-
-      // フィラー文を除去して翻訳結果を抽出
-      const resultLines: string[] = [];
-      let inFillerSection = true;
-
-      for (const line of lines) {
-        const trimmedLine = line.trim();
-
-        // 空行はフィラーセクション中はスキップ、翻訳セクション中は保持
-        if (trimmedLine.length === 0) {
-          if (!inFillerSection) {
-            resultLines.push('');
-          }
-          continue;
-        }
-
-        // フィラー文を繰り返し除去（同じ行に複数のフィラーパターンがある場合に対応）
-        let cleanedLine = trimmedLine;
-        let hadMatch = false;
-        let keepChecking = true;
-
-        while (keepChecking && cleanedLine.length > 0) {
-          keepChecking = false;
-          for (const pattern of FILLER_PATTERNS) {
-            const match = pattern.exec(cleanedLine);
-            if (match) {
-              hadMatch = true;
-              cleanedLine = cleanedLine.substring(match[0].length).trim();
-              keepChecking = true; // 再度チェック
-              break;
-            }
-          }
-        }
-
-        // フィラー除去後に何か残っている、または非フィラー行の場合
-        if (cleanedLine.length > 0) {
-          inFillerSection = false;
-          resultLines.push(cleanedLine);
-        } else if (hadMatch) {
-          // フィラー文のみの行、フィラーセクション継続
-          continue;
-        } else {
-          // 非フィラー行
-          inFillerSection = false;
-          resultLines.push(cleanedLine);
-        }
-      }
-
-      // 結果を結合
-      let result = resultLines.join('\n').trim();
-
-      // UNSUPPORTED_LANGUAGEの特別処理
-      if (result === 'UNSUPPORTED_LANGUAGE') {
-        const { UnsupportedLanguageError } = await import('./errors');
-        throw new UnsupportedLanguageError(
-          'Language not supported by AI detection'
-        );
-      }
-
-      // 空の結果、または英語のみの結果はバリデーションエラー
-      if (!result || result.length === 0) {
-        const { ValidationError } = await import('./errors');
-        throw new ValidationError('AI returned empty translation');
-      }
-
-      // 結果が英語のみ（日本語・中国語の文字を含まない）の場合はバリデーションエラー
-      const hasJapaneseChinese = /[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/.test(
-        result
+      const error = new TranslationError(
+        `Poe API Error: ${statusCode} ${response.statusText} - ${errorText}`,
+        errorCode
       );
-      if (!hasJapaneseChinese) {
-        const { ValidationError } = await import('./errors');
-        throw new ValidationError(
-          `AI returned non-Japanese/Chinese text: ${result}`
-        );
+
+      // Retry-Afterヘッダーを保存
+      const retryAfter = response.headers.get('Retry-After');
+      if (retryAfter) {
+        (error as any).retryAfter = parseInt(retryAfter, 10);
       }
 
-      return result;
-    } catch (error) {
-      // カスタムエラー（UnsupportedLanguageError, ValidationError）はそのまま再スロー
-      if (
-        error instanceof Error &&
-        (error.name === 'UnsupportedLanguageError' ||
-          error.name === 'ValidationError')
-      ) {
-        throw error;
+      throw error;
+    }
+
+    const data = (await response.json()) as PoeApiResponse;
+    const rawContent = this.extractRawContent(data);
+
+    // バリデーション: 既知のフィラー文をスキップして翻訳結果を抽出
+    const lines = rawContent.trim().split('\n');
+
+    // フィラー文のパターン（英語の説明文など）
+    const FILLER_PATTERNS = [
+      /^(Sure|Here|Okay|Alright|OK)[,:\s]/i,
+      /^(the\s+)?(Translation|Translated|Result)[:\s]/i,
+      /^(The translation is|Here's the translation|is the translation|is the result)[:\s]/i,
+      /^(here is|here's|this is|is the)[:\s]/i,
+    ];
+
+    // フィラー文を除去して翻訳結果を抽出
+    const resultLines: string[] = [];
+    let inFillerSection = true;
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+
+      // 空行はフィラーセクション中はスキップ、翻訳セクション中は保持
+      if (trimmedLine.length === 0) {
+        if (!inFillerSection) {
+          resultLines.push('');
+        }
+        continue;
       }
 
-      // TranslationErrorもそのまま再スロー
-      if (error instanceof TranslationError) {
-        throw error;
+      // フィラー文を繰り返し除去（同じ行に複数のフィラーパターンがある場合に対応）
+      let cleanedLine = trimmedLine;
+      let hadMatch = false;
+      let keepChecking = true;
+
+      while (keepChecking && cleanedLine.length > 0) {
+        keepChecking = false;
+        for (const pattern of FILLER_PATTERNS) {
+          const match = pattern.exec(cleanedLine);
+          if (match) {
+            hadMatch = true;
+            cleanedLine = cleanedLine.substring(match[0].length).trim();
+            keepChecking = true; // 再度チェック
+            break;
+          }
+        }
       }
 
-      // その他のネットワークエラーなど
-      throw new TranslationError(
-        'Network error during AI detection',
-        ErrorCode.NETWORK_ERROR,
-        error as Error
+      // フィラー除去後に何か残っている、または非フィラー行の場合
+      if (cleanedLine.length > 0) {
+        inFillerSection = false;
+        resultLines.push(cleanedLine);
+      } else if (hadMatch) {
+        // フィラー文のみの行、フィラーセクション継続
+        continue;
+      } else {
+        // 非フィラー行
+        inFillerSection = false;
+        resultLines.push(cleanedLine);
+      }
+    }
+
+    // 結果を結合
+    let result = resultLines.join('\n').trim();
+
+    // UNSUPPORTED_LANGUAGEの特別処理
+    if (result === 'UNSUPPORTED_LANGUAGE') {
+      const { UnsupportedLanguageError } = await import('./errors');
+      throw new UnsupportedLanguageError(
+        'Language not supported by AI detection'
       );
     }
+
+    // 空の結果、または英語のみの結果はバリデーションエラー
+    if (!result || result.length === 0) {
+      const { ValidationError } = await import('./errors');
+      throw new ValidationError('AI returned empty translation');
+    }
+
+    // 結果が英語のみ（日本語・中国語の文字を含まない）の場合はバリデーションエラー
+    const hasJapaneseChinese = /[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/.test(
+      result
+    );
+    if (!hasJapaneseChinese) {
+      const { ValidationError } = await import('./errors');
+      throw new ValidationError(
+        `AI returned non-Japanese/Chinese text: ${result}`
+      );
+    }
+
+    // 元テキストと同一の場合はバリデーションエラー
+    if (result === text) {
+      const { ValidationError } = await import('./errors');
+      throw new ValidationError(
+        'Translation failed: output is identical to input'
+      );
+    }
+
+    return result;
   }
 }
