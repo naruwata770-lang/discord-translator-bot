@@ -12,6 +12,12 @@ describe('MessageDispatcher', () => {
   beforeEach(() => {
     dispatcher = new MessageDispatcher();
 
+    // 返信メッセージのモック（react機能付き）
+    const mockSentMessage = {
+      id: 'sent-message-id',
+      react: jest.fn().mockResolvedValue(undefined),
+    };
+
     // モックメッセージ作成
     mockMessage = {
       author: {
@@ -19,7 +25,7 @@ describe('MessageDispatcher', () => {
         displayAvatarURL: jest.fn().mockReturnValue('https://avatar.url'),
       },
       createdAt: new Date('2025-10-17T12:00:00Z'),
-      reply: jest.fn().mockResolvedValue(undefined),
+      reply: jest.fn().mockResolvedValue(mockSentMessage),
       cleanContent: '',  // デフォルト値
     } as any;
 

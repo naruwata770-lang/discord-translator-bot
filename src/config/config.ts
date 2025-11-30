@@ -49,6 +49,10 @@ export class ConfigStore {
     return this.config.DISCORD_BOT_TOKEN;
   }
 
+  get discordBotUserId(): string | undefined {
+    return this.config.DISCORD_BOT_USER_ID;
+  }
+
   get targetChannels(): string[] {
     if (!this.config.TARGET_CHANNELS) return [];
     return this.config.TARGET_CHANNELS.split(',').map((id) => id.trim());
