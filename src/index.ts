@@ -1,6 +1,7 @@
 import { DiscordClient } from './discord/discordClient';
 import { MessageHandler } from './discord/messageHandler';
 import { MessageDispatcher } from './discord/messageDispatcher';
+import { ReactionHandler } from './discord/reactionHandler';
 import { CommandParser } from './commands/commandParser';
 import { TranslationService } from './services/translationService';
 import { PoeApiClient } from './services/poeApiClient';
@@ -87,10 +88,25 @@ async function main() {
       config.targetChannels
     );
 
+    // ReactionHandlerの初期化（botUserIdが設定されている場合のみ）
+    let reactionHandler: ReactionHandler | undefined;
+    if (config.discordBotUserId) {
+      reactionHandler = new ReactionHandler(
+        translationService,
+        dispatcher,
+        config.targetChannels,
+        config.discordBotUserId
+      );
+      logger.info('Retry feature enabled', { botUserId: config.discordBotUserId });
+    } else {
+      logger.info('Retry feature disabled (DISCORD_BOT_USER_ID not set)');
+    }
+
     // DiscordClientの初期化と起動
     const discordClient = new DiscordClient(
       config.discordBotToken,
-      messageHandler
+      messageHandler,
+      reactionHandler
     );
 
     await discordClient.start();

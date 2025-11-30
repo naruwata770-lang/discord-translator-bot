@@ -1,8 +1,10 @@
-import { EmbedBuilder, Message } from 'discord.js';
+import { Message } from 'discord.js';
 import { TranslationError } from '../utils/errors';
 import { ErrorCode } from '../types';
 import { MultiTranslationResult } from '../types/multiTranslation';
 import logger from '../utils/logger';
+
+const RETRY_EMOJI = '🔄';
 
 // send()メソッドを持つチャンネルの型
 type ChannelWithSend = {
@@ -68,10 +70,11 @@ export class MessageDispatcher {
     if (message.length <= 2000) {
       // 1メッセージで送信
       try {
-        await originalMessage.reply({
+        const sentMessage = await originalMessage.reply({
           content: message,
           allowedMentions: { parse: [], repliedUser: false },
         });
+        await this.addRetryReaction(sentMessage);
       } catch (error) {
         logger.error('Failed to send multi-translation', {
           messageId: originalMessage.id,
@@ -161,8 +164,10 @@ export class MessageDispatcher {
 
     // 原文を送信
     const originalMsg = `💬 **原文**\n${cleanText}\n\n${sourceFlag} 自動翻訳`;
+    let firstSentMessage: Message | null = null;
+
     if (originalMsg.length <= 2000) {
-      await originalMessage.reply({
+      firstSentMessage = await originalMessage.reply({
         content: originalMsg,
         allowedMentions: { parse: [], repliedUser: false },
       });
@@ -175,7 +180,7 @@ export class MessageDispatcher {
           : `💬 **原文（続き）**\n${chunks[i]}`;
 
         if (i === 0) {
-          await originalMessage.reply({
+          firstSentMessage = await originalMessage.reply({
             content,
             allowedMentions: { parse: [], repliedUser: false },
           });
@@ -212,6 +217,26 @@ export class MessageDispatcher {
         const langName = this.getLanguageName(result.targetLang);
         await (originalMessage.channel as any).send(`${flag} **${langName}**\n⚠️ 翻訳に失敗しました`);
       }
+    }
+
+    // 最初のメッセージにリトライリアクションを追加
+    if (firstSentMessage) {
+      await this.addRetryReaction(firstSentMessage);
+    }
+  }
+
+  /**
+   * 翻訳メッセージにリトライ用リアクションを追加
+   */
+  private async addRetryReaction(message: Message): Promise<void> {
+    try {
+      await message.react(RETRY_EMOJI);
+    } catch (error) {
+      // リアクション追加失敗は致命的ではないのでログのみ
+      logger.warn('Failed to add retry reaction', {
+        messageId: message.id,
+        error: error instanceof Error ? error.message : error,
+      });
     }
   }
 

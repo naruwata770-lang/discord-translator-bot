@@ -4,8 +4,13 @@ import {
   Events,
   Message,
   Partials,
+  MessageReaction,
+  PartialMessageReaction,
+  User,
+  PartialUser,
 } from 'discord.js';
 import { MessageHandler } from './messageHandler';
+import { ReactionHandler } from './reactionHandler';
 import logger from '../utils/logger';
 
 export class DiscordClient {
@@ -13,16 +18,18 @@ export class DiscordClient {
 
   constructor(
     private token: string,
-    private messageHandler: MessageHandler
+    private messageHandler: MessageHandler,
+    private reactionHandler?: ReactionHandler
   ) {
     this.client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers, // サーバープロフィール取得に必要
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessageReactions,
       ],
-      partials: [Partials.Channel, Partials.Message],
+      partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User],
     });
   }
 
@@ -52,6 +59,37 @@ export class DiscordClient {
         });
       }
     });
+
+    // messageReactionAddイベント（リトライ機能）
+    if (this.reactionHandler) {
+      this.client.on(
+        Events.MessageReactionAdd,
+        async (
+          reaction: MessageReaction | PartialMessageReaction,
+          user: User | PartialUser
+        ) => {
+          try {
+            await this.reactionHandler!.handle(
+              reaction as MessageReaction,
+              user as User
+            );
+          } catch (error) {
+            logger.error('Error handling reaction', {
+              messageId: reaction.message.id,
+              emoji: reaction.emoji.name,
+              error:
+                error instanceof Error
+                  ? {
+                      name: error.name,
+                      message: error.message,
+                      stack: error.stack,
+                    }
+                  : error,
+            });
+          }
+        }
+      );
+    }
 
     // エラーイベント
     this.client.on(Events.Error, (error) => {
