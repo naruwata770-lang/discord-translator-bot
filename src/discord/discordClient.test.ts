@@ -12,14 +12,19 @@ jest.mock('discord.js', () => ({
     Guilds: 1,
     GuildMessages: 2,
     MessageContent: 4,
+    GuildMembers: 8,
+    GuildMessageReactions: 16,
   },
   Partials: {
     Channel: 1,
     Message: 2,
+    Reaction: 3,
+    User: 4,
   },
   Events: {
     ClientReady: 'ready',
     MessageCreate: 'messageCreate',
+    MessageReactionAdd: 'messageReactionAdd',
     Error: 'error',
   },
 }));
@@ -59,8 +64,10 @@ describe('DiscordClient', () => {
           GatewayIntentBits.Guilds,
           GatewayIntentBits.GuildMessages,
           GatewayIntentBits.MessageContent,
+          GatewayIntentBits.GuildMembers,
+          GatewayIntentBits.GuildMessageReactions,
         ],
-        partials: [Partials.Channel, Partials.Message],
+        partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User],
       });
     });
   });
