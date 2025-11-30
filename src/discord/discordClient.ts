@@ -40,6 +40,12 @@ export class DiscordClient {
         tag: client.user.tag,
         guilds: client.guilds.cache.size,
       });
+
+      // ReactionHandlerにbotUserIdを設定
+      if (this.reactionHandler) {
+        this.reactionHandler.setBotUserId(client.user.id);
+        logger.info('Retry feature enabled', { botUserId: client.user.id });
+      }
     });
 
     // messageCreateイベント

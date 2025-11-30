@@ -10,13 +10,17 @@ const COOLDOWN_MS = 30000; // 30秒
 
 export class ReactionHandler {
   private retryCooldowns: Map<string, number> = new Map();
+  private botUserId: string | null = null;
 
   constructor(
     private translationService: TranslationService,
     private dispatcher: MessageDispatcher,
-    private targetChannels: string[],
-    private botUserId: string
+    private targetChannels: string[]
   ) {}
+
+  setBotUserId(botUserId: string): void {
+    this.botUserId = botUserId;
+  }
 
   async handle(reaction: MessageReaction, user: User): Promise<void> {
     // パーシャルの解決
@@ -35,6 +39,7 @@ export class ReactionHandler {
     const message = reaction.message as Message;
 
     // 基本的な検証
+    if (!this.botUserId) return; // まだ初期化されていない
     if (user.bot) return;
     if (reaction.emoji.name !== RETRY_EMOJI) return;
     if (!message.guild) return; // DMを除外
