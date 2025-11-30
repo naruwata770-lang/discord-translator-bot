@@ -3,7 +3,6 @@ import { z } from 'zod';
 export const envSchema = z.object({
   // Discord設定
   DISCORD_BOT_TOKEN: z.string().min(1, 'DISCORD_BOT_TOKEN is required'),
-  DISCORD_BOT_USER_ID: z.string().optional(),
   TARGET_CHANNELS: z.string().optional(),
 
   // Poe API設定

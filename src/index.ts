@@ -88,19 +88,12 @@ async function main() {
       config.targetChannels
     );
 
-    // ReactionHandlerの初期化（botUserIdが設定されている場合のみ）
-    let reactionHandler: ReactionHandler | undefined;
-    if (config.discordBotUserId) {
-      reactionHandler = new ReactionHandler(
-        translationService,
-        dispatcher,
-        config.targetChannels,
-        config.discordBotUserId
-      );
-      logger.info('Retry feature enabled', { botUserId: config.discordBotUserId });
-    } else {
-      logger.info('Retry feature disabled (DISCORD_BOT_USER_ID not set)');
-    }
+    // ReactionHandlerの初期化
+    const reactionHandler = new ReactionHandler(
+      translationService,
+      dispatcher,
+      config.targetChannels
+    );
 
     // DiscordClientの初期化と起動
     const discordClient = new DiscordClient(
