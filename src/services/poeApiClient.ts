@@ -10,6 +10,18 @@ interface PoeApiResponse {
   }>;
 }
 
+/**
+ * AI言語検出 + 翻訳の結果
+ */
+export interface AutoDetectResult {
+  /** 翻訳されたテキスト */
+  translatedText: string;
+  /** 検出されたソース言語 */
+  sourceLang: 'ja' | 'zh';
+  /** 翻訳先言語 */
+  targetLang: 'ja' | 'zh';
+}
+
 export class PoeApiClient {
   private readonly maxRetries = 3;
   private readonly baseDelay = 1000; // 1秒
@@ -346,24 +358,24 @@ STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
    * AI言語検出 + 翻訳（言語を自動検出して翻訳を実行）
    * @param text 翻訳対象のテキスト
    * @param dictionaryHint 辞書から生成されたヒント（オプション）
-   * @returns 翻訳結果
+   * @returns 翻訳結果と検出された言語情報
    * @throws {UnsupportedLanguageError} 未対応言語の場合
    * @throws {ValidationError} AI出力が不正な場合
    * @throws {TranslationError} API呼び出しが失敗した場合
    */
-  async translateWithAutoDetect(text: string, dictionaryHint?: string): Promise<string> {
+  async translateWithAutoDetect(text: string, dictionaryHint?: string): Promise<AutoDetectResult> {
     let lastError: Error | null = null;
     let useStrongerPrompt = false;
 
     // リトライループ（最大3回）
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
-        const result = await this.executeAutoDetectTranslation(
+        const { translatedText, sourceLang, targetLang } = await this.executeAutoDetectTranslation(
           text,
           dictionaryHint,
           useStrongerPrompt
         );
-        return result;
+        return { translatedText, sourceLang, targetLang };
       } catch (error) {
         lastError = error as Error;
 
@@ -457,7 +469,7 @@ STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
     text: string,
     dictionaryHint?: string,
     useStrongerPrompt: boolean = false
-  ): Promise<string> {
+  ): Promise<AutoDetectResult> {
     const systemMessage = useStrongerPrompt
       ? `You are a precise translation engine. This is CRITICAL.
 STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
@@ -670,6 +682,44 @@ Output: これは壊れました`;
       );
     }
 
-    return result;
+    // 言語を推定：入力テキストと出力テキストの文字種から判定
+    const { sourceLang, targetLang } = this.inferLanguages(text, result);
+
+    return { translatedText: result, sourceLang, targetLang };
+  }
+
+  /**
+   * 入力テキストと出力テキストから言語を推定
+   * AIが日本語→中国語、中国語→日本語で翻訳するため、
+   * 出力の文字種から逆算してソース言語を特定
+   */
+  private inferLanguages(inputText: string, outputText: string): { sourceLang: 'ja' | 'zh'; targetLang: 'ja' | 'zh' } {
+    // 出力にひらがな・カタカナがあれば日本語への翻訳（ソースは中国語）
+    const outputHasKana = /[\u3040-\u309f\u30a0-\u30ff]/.test(outputText);
+    if (outputHasKana) {
+      return { sourceLang: 'zh', targetLang: 'ja' };
+    }
+
+    // 入力にひらがな・カタカナがあれば日本語からの翻訳（ターゲットは中国語）
+    const inputHasKana = /[\u3040-\u309f\u30a0-\u30ff]/.test(inputText);
+    if (inputHasKana) {
+      return { sourceLang: 'ja', targetLang: 'zh' };
+    }
+
+    // 漢字のみの場合：入力が中国語パターンを持つか確認
+    // 簡体字があれば中国語
+    const inputHasSimplified = /[坏弄彻过这为们务产实际关现发经边园讲头儿岁块钱习视听说读写飞机场站脑网络爱买卖师爷奶妈爸孩样啊哦吗呢嘛]/.test(inputText);
+    if (inputHasSimplified) {
+      return { sourceLang: 'zh', targetLang: 'ja' };
+    }
+
+    // 出力に簡体字があれば中国語への翻訳
+    const outputHasSimplified = /[坏弄彻过这为们务产实际关现发经边园讲头儿岁块钱习视听说读写飞机场站脑网络爱买卖师爷奶妈爸孩样啊哦吗呢嘛]/.test(outputText);
+    if (outputHasSimplified) {
+      return { sourceLang: 'ja', targetLang: 'zh' };
+    }
+
+    // デフォルト：中国語→日本語（漢字のみの入力は中国語の可能性が高い）
+    return { sourceLang: 'zh', targetLang: 'ja' };
   }
 }
