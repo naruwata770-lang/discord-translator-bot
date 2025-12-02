@@ -692,6 +692,8 @@ Output: これは壊れました`;
    * 入力テキストと出力テキストから言語を推定
    * AIが日本語→中国語、中国語→日本語で翻訳するため、
    * 出力の文字種から逆算してソース言語を特定
+   *
+   * LanguageDetectorと同等のロジックを使用して一貫性を保つ
    */
   private inferLanguages(inputText: string, outputText: string): { sourceLang: 'ja' | 'zh'; targetLang: 'ja' | 'zh' } {
     // 出力にひらがな・カタカナがあれば日本語への翻訳（ソースは中国語）
@@ -706,20 +708,63 @@ Output: これは壊れました`;
       return { sourceLang: 'ja', targetLang: 'zh' };
     }
 
-    // 漢字のみの場合：入力が中国語パターンを持つか確認
-    // 簡体字があれば中国語
-    const inputHasSimplified = /[坏弄彻过这为们务产实际关现发经边园讲头儿岁块钱习视听说读写飞机场站脑网络爱买卖师爷奶妈爸孩样啊哦吗呢嘛]/.test(inputText);
-    if (inputHasSimplified) {
+    // 簡体字パターン（LanguageDetectorと同じ）
+    const simplifiedPattern = /[坏弄彻过这为们务产实际关现发经边园讲头儿岁块钱习视听说读写飞机场站脑网络爱买卖师爷奶妈爸孩样啊哦吗呢嘛]/;
+
+    // 入力に簡体字があれば中国語からの翻訳
+    if (simplifiedPattern.test(inputText)) {
       return { sourceLang: 'zh', targetLang: 'ja' };
     }
 
     // 出力に簡体字があれば中国語への翻訳
-    const outputHasSimplified = /[坏弄彻过这为们务产实际关现发经边园讲头儿岁块钱习视听说读写飞机场站脑网络爱买卖师爷奶妈爸孩样啊哦吗呢嘛]/.test(outputText);
-    if (outputHasSimplified) {
+    if (simplifiedPattern.test(outputText)) {
       return { sourceLang: 'ja', targetLang: 'zh' };
     }
 
-    // デフォルト：中国語→日本語（漢字のみの入力は中国語の可能性が高い）
+    // 日本語句読点パターン（「、」「」『』・は日本語固有）
+    const japaneseOnlyPunctuation = /[、「」『』・]/;
+
+    // 入力に日本語固有の句読点があれば日本語からの翻訳
+    if (japaneseOnlyPunctuation.test(inputText)) {
+      return { sourceLang: 'ja', targetLang: 'zh' };
+    }
+
+    // 出力に日本語固有の句読点があれば日本語への翻訳
+    if (japaneseOnlyPunctuation.test(outputText)) {
+      return { sourceLang: 'zh', targetLang: 'ja' };
+    }
+
+    // 中国語句読点パターン（，！？；：は中国語固有）
+    const chineseOnlyPunctuation = /[，！？；：""''【】（）]/;
+
+    // 入力に中国語固有の句読点があれば中国語からの翻訳
+    if (chineseOnlyPunctuation.test(inputText)) {
+      return { sourceLang: 'zh', targetLang: 'ja' };
+    }
+
+    // 出力に中国語固有の句読点があれば中国語への翻訳
+    if (chineseOnlyPunctuation.test(outputText)) {
+      return { sourceLang: 'ja', targetLang: 'zh' };
+    }
+
+    // 中国語文法パターン（LanguageDetectorと同じ）
+    const zhGrammarPattern = /在.{0,3}[去来到看说写读听]|或者|一般会|当地|会[去来到说写读听看]|[要用再了吗呢啊哦嘛]/;
+
+    // 入力に中国語文法パターンがあれば中国語からの翻訳
+    if (zhGrammarPattern.test(inputText)) {
+      return { sourceLang: 'zh', targetLang: 'ja' };
+    }
+
+    // 日本語特有パターン（LanguageDetectorと同じ）
+    const jpSpecificPattern = /日本語|日本人|時間|会社|東京|大阪|京都|北海道/;
+
+    // 入力に日本語特有パターンがあれば日本語からの翻訳
+    if (jpSpecificPattern.test(inputText)) {
+      return { sourceLang: 'ja', targetLang: 'zh' };
+    }
+
+    // デフォルト：漢字のみで判断できない場合は中国語→日本語
+    // （簡体字圏の方が漢字のみで書く傾向が強いため）
     return { sourceLang: 'zh', targetLang: 'ja' };
   }
 }
