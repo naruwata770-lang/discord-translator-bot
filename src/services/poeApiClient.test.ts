@@ -720,7 +720,9 @@ describe('PoeApiClient', () => {
 
       const result = await client.translateWithAutoDetect('こんにちは');
 
-      expect(result).toBe('你好');
+      expect(result.translatedText).toBe('你好');
+      expect(result.sourceLang).toBe('ja');
+      expect(result.targetLang).toBe('zh');
       expect(global.fetch).toHaveBeenCalledTimes(1);
       const callArgs = (global.fetch as jest.Mock).mock.calls[0];
       const body = JSON.parse(callArgs[1].body);
@@ -741,7 +743,9 @@ describe('PoeApiClient', () => {
 
       const result = await client.translateWithAutoDetect('你好');
 
-      expect(result).toBe('こんにちは');
+      expect(result.translatedText).toBe('こんにちは');
+      expect(result.sourceLang).toBe('zh');
+      expect(result.targetLang).toBe('ja');
     });
 
     it('should throw UnsupportedLanguageError for English', async () => {
@@ -779,7 +783,7 @@ describe('PoeApiClient', () => {
 
       const result = await client.translateWithAutoDetect('こんにちは');
 
-      expect(result).toBe('你好');
+      expect(result.translatedText).toBe('你好');
     });
 
     it('should handle same-line filler and translation', async () => {
@@ -795,7 +799,7 @@ describe('PoeApiClient', () => {
 
       const result = await client.translateWithAutoDetect('こんにちは');
 
-      expect(result).toBe('你好');
+      expect(result.translatedText).toBe('你好');
     });
 
     it('should handle same-line filler variants', async () => {
@@ -811,7 +815,7 @@ describe('PoeApiClient', () => {
       });
 
       const result1 = await client.translateWithAutoDetect('こんにちは');
-      expect(result1).toBe('你好');
+      expect(result1.translatedText).toBe('你好');
 
       // Test "OK: こんにちは"
       const mockResponse2 = {
@@ -825,7 +829,7 @@ describe('PoeApiClient', () => {
       });
 
       const result2 = await client.translateWithAutoDetect('你好');
-      expect(result2).toBe('こんにちは');
+      expect(result2.translatedText).toBe('こんにちは');
     });
 
     it('should handle complex filler chains', async () => {
@@ -841,7 +845,7 @@ describe('PoeApiClient', () => {
       });
 
       const result1 = await client.translateWithAutoDetect('こんにちは');
-      expect(result1).toBe('你好');
+      expect(result1.translatedText).toBe('你好');
 
       // Test "Okay, here is the result: こんにちは"
       const mockResponse2 = {
@@ -857,7 +861,7 @@ describe('PoeApiClient', () => {
       });
 
       const result2 = await client.translateWithAutoDetect('你好');
-      expect(result2).toBe('こんにちは');
+      expect(result2.translatedText).toBe('こんにちは');
     });
 
     it('should throw ValidationError for English-only response', async () => {
@@ -932,7 +936,7 @@ describe('PoeApiClient', () => {
         'こんにちは\n\n今日はいい天気です'
       );
 
-      expect(result).toBe('你好\n\n今天天气很好');
+      expect(result.translatedText).toBe('你好\n\n今天天气很好');
     });
 
     it('should include dictionary hint in prompt when provided', async () => {
@@ -973,7 +977,7 @@ describe('PoeApiClient', () => {
       // 辞書ヒントなしで呼び出し
       const result = await client.translateWithAutoDetect('こんにちは');
 
-      expect(result).toBe('你好');
+      expect(result.translatedText).toBe('你好');
 
       const callArgs = (global.fetch as jest.Mock).mock.calls[0];
       const body = JSON.parse(callArgs[1].body);
@@ -1012,7 +1016,7 @@ describe('PoeApiClient', () => {
         });
 
       const result = await client.translateWithAutoDetect('こんにちは');
-      expect(result).toBe('你好');
+      expect(result.translatedText).toBe('你好');
       expect(global.fetch).toHaveBeenCalledTimes(3);
     });
 
@@ -1032,7 +1036,7 @@ describe('PoeApiClient', () => {
         });
 
       const result = await client.translateWithAutoDetect('こんにちは');
-      expect(result).toBe('你好');
+      expect(result.translatedText).toBe('你好');
       expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
@@ -1058,7 +1062,7 @@ describe('PoeApiClient', () => {
         });
 
       const result = await client.translateWithAutoDetect('こんにちは');
-      expect(result).toBe('你好');
+      expect(result.translatedText).toBe('你好');
       expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
@@ -1151,7 +1155,7 @@ describe('PoeApiClient', () => {
         });
 
       const result = await client.translateWithAutoDetect('こんにちは');
-      expect(result).toBe('你好');
+      expect(result.translatedText).toBe('你好');
       expect(global.fetch).toHaveBeenCalledTimes(2);
     });
   });
