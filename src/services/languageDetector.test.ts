@@ -29,7 +29,9 @@ describe('LanguageDetector', () => {
 
     it('漢字のみで日本語特有のパターンがあれば日本語と判定する', () => {
       expect(detector.detect('日本語')).toBe('ja');
-      expect(detector.detect('今日明日')).toBe('ja');
+      expect(detector.detect('日本人')).toBe('ja');
+      expect(detector.detect('東京')).toBe('ja');
+      expect(detector.detect('会社')).toBe('ja');
     });
   });
 
@@ -55,6 +57,21 @@ describe('LanguageDetector', () => {
     it('中国語特有の単語パターンを検出する', () => {
       expect(detector.detect('我要学习')).toBe('zh');
       expect(detector.detect('再来一次')).toBe('zh');
+    });
+
+    it('中国語の文法パターン「在+動詞」を検出する', () => {
+      expect(detector.detect('我在外地一般会去当地的公园或者江边')).toBe('zh');
+      expect(detector.detect('我在看书')).toBe('zh');
+    });
+
+    it('中国語の文法パターン「会+動詞」を検出する', () => {
+      expect(detector.detect('我会说中文')).toBe('zh');
+      expect(detector.detect('他会去')).toBe('zh');
+    });
+
+    it('中国語の「或者」「当地」などの語彙を検出する', () => {
+      expect(detector.detect('或者明天')).toBe('zh');
+      expect(detector.detect('当地人')).toBe('zh');
     });
 
     it('簡体字と日本語句読点が混在する場合は簡体字を優先して中国語と判定', () => {
