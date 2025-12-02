@@ -10,6 +10,18 @@ interface PoeApiResponse {
   }>;
 }
 
+/**
+ * AI言語検出 + 翻訳の結果
+ */
+export interface AutoDetectResult {
+  /** 翻訳されたテキスト */
+  translatedText: string;
+  /** 検出されたソース言語 */
+  sourceLang: 'ja' | 'zh';
+  /** 翻訳先言語 */
+  targetLang: 'ja' | 'zh';
+}
+
 export class PoeApiClient {
   private readonly maxRetries = 3;
   private readonly baseDelay = 1000; // 1秒
@@ -346,24 +358,24 @@ STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
    * AI言語検出 + 翻訳（言語を自動検出して翻訳を実行）
    * @param text 翻訳対象のテキスト
    * @param dictionaryHint 辞書から生成されたヒント（オプション）
-   * @returns 翻訳結果
+   * @returns 翻訳結果と検出された言語情報
    * @throws {UnsupportedLanguageError} 未対応言語の場合
    * @throws {ValidationError} AI出力が不正な場合
    * @throws {TranslationError} API呼び出しが失敗した場合
    */
-  async translateWithAutoDetect(text: string, dictionaryHint?: string): Promise<string> {
+  async translateWithAutoDetect(text: string, dictionaryHint?: string): Promise<AutoDetectResult> {
     let lastError: Error | null = null;
     let useStrongerPrompt = false;
 
     // リトライループ（最大3回）
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
-        const result = await this.executeAutoDetectTranslation(
+        const { translatedText, sourceLang, targetLang } = await this.executeAutoDetectTranslation(
           text,
           dictionaryHint,
           useStrongerPrompt
         );
-        return result;
+        return { translatedText, sourceLang, targetLang };
       } catch (error) {
         lastError = error as Error;
 
@@ -457,7 +469,7 @@ STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
     text: string,
     dictionaryHint?: string,
     useStrongerPrompt: boolean = false
-  ): Promise<string> {
+  ): Promise<AutoDetectResult> {
     const systemMessage = useStrongerPrompt
       ? `You are a precise translation engine. This is CRITICAL.
 STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
@@ -670,6 +682,89 @@ Output: これは壊れました`;
       );
     }
 
-    return result;
+    // 言語を推定：入力テキストと出力テキストの文字種から判定
+    const { sourceLang, targetLang } = this.inferLanguages(text, result);
+
+    return { translatedText: result, sourceLang, targetLang };
+  }
+
+  /**
+   * 入力テキストと出力テキストから言語を推定
+   * AIが日本語→中国語、中国語→日本語で翻訳するため、
+   * 出力の文字種から逆算してソース言語を特定
+   *
+   * LanguageDetectorと同等のロジックを使用して一貫性を保つ
+   */
+  private inferLanguages(inputText: string, outputText: string): { sourceLang: 'ja' | 'zh'; targetLang: 'ja' | 'zh' } {
+    // 出力にひらがな・カタカナがあれば日本語への翻訳（ソースは中国語）
+    const outputHasKana = /[\u3040-\u309f\u30a0-\u30ff]/.test(outputText);
+    if (outputHasKana) {
+      return { sourceLang: 'zh', targetLang: 'ja' };
+    }
+
+    // 入力にひらがな・カタカナがあれば日本語からの翻訳（ターゲットは中国語）
+    const inputHasKana = /[\u3040-\u309f\u30a0-\u30ff]/.test(inputText);
+    if (inputHasKana) {
+      return { sourceLang: 'ja', targetLang: 'zh' };
+    }
+
+    // 簡体字パターン（LanguageDetectorと同じ）
+    const simplifiedPattern = /[坏弄彻过这为们务产实际关现发经边园讲头儿岁块钱习视听说读写飞机场站脑网络爱买卖师爷奶妈爸孩样啊哦吗呢嘛]/;
+
+    // 入力に簡体字があれば中国語からの翻訳
+    if (simplifiedPattern.test(inputText)) {
+      return { sourceLang: 'zh', targetLang: 'ja' };
+    }
+
+    // 出力に簡体字があれば中国語への翻訳
+    if (simplifiedPattern.test(outputText)) {
+      return { sourceLang: 'ja', targetLang: 'zh' };
+    }
+
+    // 日本語句読点パターン（「、」「」『』・は日本語固有）
+    const japaneseOnlyPunctuation = /[、「」『』・]/;
+
+    // 入力に日本語固有の句読点があれば日本語からの翻訳
+    if (japaneseOnlyPunctuation.test(inputText)) {
+      return { sourceLang: 'ja', targetLang: 'zh' };
+    }
+
+    // 出力に日本語固有の句読点があれば日本語への翻訳
+    if (japaneseOnlyPunctuation.test(outputText)) {
+      return { sourceLang: 'zh', targetLang: 'ja' };
+    }
+
+    // 中国語句読点パターン（，！？；：は中国語固有）
+    const chineseOnlyPunctuation = /[，！？；：""''【】（）]/;
+
+    // 入力に中国語固有の句読点があれば中国語からの翻訳
+    if (chineseOnlyPunctuation.test(inputText)) {
+      return { sourceLang: 'zh', targetLang: 'ja' };
+    }
+
+    // 出力に中国語固有の句読点があれば中国語への翻訳
+    if (chineseOnlyPunctuation.test(outputText)) {
+      return { sourceLang: 'ja', targetLang: 'zh' };
+    }
+
+    // 中国語文法パターン（LanguageDetectorと同じ）
+    const zhGrammarPattern = /在.{0,3}[去来到看说写读听]|或者|一般会|当地|会[去来到说写读听看]|[要用再了吗呢啊哦嘛]/;
+
+    // 入力に中国語文法パターンがあれば中国語からの翻訳
+    if (zhGrammarPattern.test(inputText)) {
+      return { sourceLang: 'zh', targetLang: 'ja' };
+    }
+
+    // 日本語特有パターン（LanguageDetectorと同じ）
+    const jpSpecificPattern = /日本語|日本人|時間|会社|東京|大阪|京都|北海道/;
+
+    // 入力に日本語特有パターンがあれば日本語からの翻訳
+    if (jpSpecificPattern.test(inputText)) {
+      return { sourceLang: 'ja', targetLang: 'zh' };
+    }
+
+    // デフォルト：漢字のみで判断できない場合は中国語→日本語
+    // （簡体字圏の方が漢字のみで書く傾向が強いため）
+    return { sourceLang: 'zh', targetLang: 'ja' };
   }
 }

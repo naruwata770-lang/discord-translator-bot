@@ -23,7 +23,6 @@ describe('MessageHandler', () => {
     mockDispatcher = new MessageDispatcher() as jest.Mocked<MessageDispatcher>;
 
     mockCommandParser.parse = jest.fn();
-    mockTranslationService.translate = jest.fn();
     mockTranslationService.multiTranslate = jest.fn();
     mockDispatcher.sendMultiTranslation = jest.fn().mockResolvedValue(undefined);
     mockDispatcher.sendCommandResponse = jest.fn().mockResolvedValue(undefined);
@@ -61,7 +60,7 @@ describe('MessageHandler', () => {
 
       await handler.handle(mockMessage);
 
-      expect(mockTranslationService.translate).not.toHaveBeenCalled();
+      expect(mockTranslationService.multiTranslate).not.toHaveBeenCalled();
     });
 
     it('対象外のチャンネルのメッセージは無視する', async () => {
@@ -69,7 +68,7 @@ describe('MessageHandler', () => {
 
       await handler.handle(mockMessage);
 
-      expect(mockTranslationService.translate).not.toHaveBeenCalled();
+      expect(mockTranslationService.multiTranslate).not.toHaveBeenCalled();
     });
 
     it('対象チャンネルのメッセージは処理する', async () => {
