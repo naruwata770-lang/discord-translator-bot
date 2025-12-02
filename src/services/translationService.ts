@@ -23,36 +23,15 @@ export class TranslationService {
 
   /**
    * 簡易言語検出（辞書マッチング用）
+   * LanguageDetectorに委譲して一貫した言語判定を行う
    * @param text テキスト
    * @returns 'ja' | 'zh' | null
    */
   private detectSimpleLanguage(text: string): LanguageCode | null {
-    // ひらがな・カタカナがあれば確実に日本語
-    if (/[\u3040-\u309f\u30a0-\u30ff]/.test(text)) {
-      return 'ja';
+    const detected = this.languageDetector.detect(text);
+    if (detected === 'ja' || detected === 'zh') {
+      return detected;
     }
-
-    // 日本語句読点があれば日本語
-    if (/[。、]/.test(text)) {
-      return 'ja';
-    }
-
-    // 中国語句読点があれば中国語
-    if (/[，。！？；：]/.test(text)) {
-      return 'zh';
-    }
-
-    // 漢字のみの場合は既存のLanguageDetectorを使用
-    if (/[\u4e00-\u9fff]/.test(text)) {
-      const detected = this.languageDetector.detect(text);
-      if (detected === 'ja' || detected === 'zh') {
-        return detected;
-      }
-      // LanguageDetectorでも判定できない場合は日本語を優先
-      // （日中友達との会話なので、曖昧な場合は日本語が多いと想定）
-      return 'ja';
-    }
-
     return null;
   }
 
