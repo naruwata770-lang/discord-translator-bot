@@ -22,21 +22,11 @@ export class TranslationService {
   ) {}
 
   /**
-   * 簡易言語検出（辞書マッチング用）
-   * LanguageDetectorに委譲して一貫した言語判定を行う
-   * @param text テキスト
-   * @returns 'ja' | 'zh' | null
-   */
-  private detectSimpleLanguage(text: string): LanguageCode | null {
-    const detected = this.languageDetector.detect(text);
-    if (detected === 'ja' || detected === 'zh') {
-      return detected;
-    }
-    return null;
-  }
-
-  /**
-   * 複数言語への同時翻訳
+   * 複数言語への同時翻訳（3ステップフロー）
+   * 1. 言語検出（AI or ルールベース）
+   * 2. 日中翻訳（ja→zh または zh→ja）
+   * 3. 英語翻訳
+   *
    * @param text 翻訳対象テキスト
    * @param targets 翻訳先言語のリスト（省略時は自動決定: 日本語→中国語+英語、中国語→日本語+英語）
    * @returns 各言語への翻訳結果（成功/失敗を含む）
@@ -46,65 +36,46 @@ export class TranslationService {
     targets?: MultiTranslateTarget[]
   ): Promise<MultiTranslationResult[]> {
     let sourceLang: string;
-    let firstTranslationResult: { targetLang: string; translatedText: string } | null = null;
 
-    // 1. AI言語検出を試行（最初の翻訳も同時に取得）
+    // Step 1: 言語検出
     if (this.useAiDetection) {
       try {
-        // 辞書ヒントを準備（簡易言語検出で方向を推定）
-        let dictionaryHint: string | undefined;
-        if (this.dictionaryService) {
-          const estimatedLang = this.detectSimpleLanguage(text);
-          if (estimatedLang) {
-            const estimatedTarget = estimatedLang === 'ja' ? 'zh' : 'ja';
-            const matches = this.dictionaryService.findMatches(
-              text,
-              estimatedLang,
-              estimatedTarget as LanguageCode
-            );
-            if (matches.length > 0) {
-              dictionaryHint = this.dictionaryService.generatePromptHint(matches);
-            }
-          }
-        }
-
         await this.rateLimiter.acquire();
         try {
-          const aiResult = await this.poeClient.translateWithAutoDetect(text, dictionaryHint);
-          sourceLang = aiResult.sourceLang;
-          firstTranslationResult = {
-            targetLang: aiResult.targetLang,
-            translatedText: aiResult.translatedText,
-          };
-          logger.info('AI language detection succeeded in multiTranslate', {
-            sourceLang,
-            targetLang: aiResult.targetLang,
-            textLength: text.length,
-          });
+          const detectedLang = await this.poeClient.detectLanguage(text);
+
+          if (detectedLang === 'unsupported') {
+            // AIがunsupportedと判定しても、ルールベースにフォールバック
+            // （AIが誤って日本語/中国語をunsupportedと判定する可能性があるため）
+            logger.warn('AI detected unsupported, falling back to rule-based', {
+              textSample: text.substring(0, 50),
+            });
+            sourceLang = this.languageDetector.detect(text);
+          } else {
+            sourceLang = detectedLang;
+            logger.info('AI language detection succeeded in multiTranslate', {
+              sourceLang,
+              textLength: text.length,
+            });
+          }
         } finally {
           this.rateLimiter.release();
         }
       } catch (error) {
-        // UnsupportedLanguageErrorは全結果をエラーで返す
+        // UnsupportedLanguageErrorもルールベースにフォールバック
+        // （AIの誤判定の可能性があるため）
         if (error instanceof UnsupportedLanguageError) {
-          logger.info('Unsupported language detected by AI in multiTranslate', {
+          logger.warn('AI threw UnsupportedLanguageError, falling back to rule-based', {
             textSample: text.substring(0, 50),
           });
-          const defaultTargets = targets || [{ lang: 'zh' }, { lang: 'en' }];
-          return defaultTargets.map((target) => ({
-            status: 'error' as const,
-            sourceLang: 'unknown',
-            targetLang: target.lang,
-            errorCode: ErrorCode.INVALID_INPUT,
-            errorMessage: 'Language not supported',
-          }));
+          sourceLang = this.languageDetector.detect(text);
+        } else {
+          // その他のエラーもルールベースにフォールバック
+          logger.warn('AI detection failed in multiTranslate, falling back to rule-based', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          sourceLang = this.languageDetector.detect(text);
         }
-
-        // その他のエラーはルールベースにフォールバック
-        logger.warn('AI detection failed in multiTranslate, falling back to rule-based', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        sourceLang = this.languageDetector.detect(text);
       }
     } else {
       // AI検出無効時はルールベース検出
@@ -123,7 +94,7 @@ export class TranslationService {
       }));
     }
 
-    // 2. targetsが指定されていない場合は、ソース言語に基づいて自動決定
+    // Step 2: targetsが指定されていない場合は、ソース言語に基づいて自動決定
     if (!targets) {
       if (sourceLang === 'zh') {
         // 中国語 → 日本語 + 英語
@@ -134,37 +105,8 @@ export class TranslationService {
       }
     }
 
-    // 3. 各ターゲット言語に対して翻訳（AI検出で取得済みの結果は再利用）
+    // Step 3: 各ターゲット言語に対して翻訳（並列実行）
     const promises = targets.map(async (target) => {
-      // AI検出で既に取得済みの翻訳結果があれば再利用
-      if (firstTranslationResult && target.lang === firstTranslationResult.targetLang) {
-        logger.debug('Reusing AI detection translation result', {
-          sourceLang,
-          targetLang: target.lang,
-        });
-
-        // 辞書マッチング情報を取得
-        let glossaryHints: DictionaryMatch[] | undefined;
-        if (this.dictionaryService) {
-          const matches = this.dictionaryService.findMatches(
-            text,
-            sourceLang as LanguageCode,
-            target.lang
-          );
-          if (matches.length > 0) {
-            glossaryHints = matches;
-          }
-        }
-
-        return {
-          status: 'success' as const,
-          sourceLang,
-          targetLang: target.lang,
-          translatedText: firstTranslationResult.translatedText,
-          glossaryHints,
-        };
-      }
-
       try {
         // 3.1 辞書マッチング
         let glossaryHints: DictionaryMatch[] | undefined;
