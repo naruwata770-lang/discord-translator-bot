@@ -1,5 +1,5 @@
 import { TranslationService } from './translationService';
-import { PoeApiClient, AutoDetectResult } from './poeApiClient';
+import { PoeApiClient } from './poeApiClient';
 import { LanguageDetector } from './languageDetector';
 import { RateLimiter } from './rateLimiter';
 import { DictionaryService } from './dictionaryService';
@@ -361,7 +361,7 @@ describe('TranslationService - multiTranslate', () => {
   });
 });
 
-describe('TranslationService - AI言語検出モード', () => {
+describe('TranslationService - AI言語検出モード（3ステップフロー）', () => {
   let service: TranslationService;
   let mockPoeClient: jest.Mocked<PoeApiClient>;
   let mockLanguageDetector: jest.Mocked<LanguageDetector>;
@@ -397,24 +397,22 @@ describe('TranslationService - AI言語検出モード', () => {
     jest.clearAllMocks();
   });
 
-  describe('AI検出成功時', () => {
-    it('AI検出で日本語→中国語の翻訳結果を取得し、英語翻訳は別途実行する', async () => {
+  describe('AI検出成功時（3ステップフロー）', () => {
+    it('日本語を検出して中国語+英語に翻訳する', async () => {
       const text = 'こんにちは';
 
-      // AI検出の結果
-      const aiResult: AutoDetectResult = {
-        translatedText: '你好',
-        sourceLang: 'ja',
-        targetLang: 'zh',
-      };
-      mockPoeClient.translateWithAutoDetect.mockResolvedValue(aiResult);
-      mockPoeClient.translate.mockResolvedValue('Hello'); // 英語翻訳
+      // Step 1: detectLanguage()が'ja'を返す
+      mockPoeClient.detectLanguage.mockResolvedValue('ja');
+      // Step 2-3: translate()が中国語と英語の翻訳を返す
+      mockPoeClient.translate
+        .mockResolvedValueOnce('你好')
+        .mockResolvedValueOnce('Hello');
 
       const results = await service.multiTranslate(text);
 
       expect(results).toHaveLength(2);
 
-      // 中国語はAI検出結果を再利用
+      // 中国語翻訳
       expect(results[0]).toMatchObject({
         status: 'success',
         sourceLang: 'ja',
@@ -422,7 +420,7 @@ describe('TranslationService - AI言語検出モード', () => {
         translatedText: '你好',
       });
 
-      // 英語は別途translate()で取得
+      // 英語翻訳
       expect(results[1]).toMatchObject({
         status: 'success',
         sourceLang: 'ja',
@@ -430,33 +428,24 @@ describe('TranslationService - AI言語検出モード', () => {
         translatedText: 'Hello',
       });
 
-      // translateWithAutoDetect()は1回、translate()は1回（英語のみ）
-      expect(mockPoeClient.translateWithAutoDetect).toHaveBeenCalledTimes(1);
-      expect(mockPoeClient.translate).toHaveBeenCalledTimes(1);
-      expect(mockPoeClient.translate).toHaveBeenCalledWith(
-        text,
-        'ja',
-        'en',
-        undefined
-      );
+      // detectLanguage()は1回、translate()は2回呼ばれる
+      expect(mockPoeClient.detectLanguage).toHaveBeenCalledTimes(1);
+      expect(mockPoeClient.translate).toHaveBeenCalledTimes(2);
     });
 
-    it('AI検出で中国語→日本語の翻訳結果を取得する', async () => {
+    it('中国語を検出して日本語+英語に翻訳する', async () => {
       const text = '你好';
 
-      const aiResult: AutoDetectResult = {
-        translatedText: 'こんにちは',
-        sourceLang: 'zh',
-        targetLang: 'ja',
-      };
-      mockPoeClient.translateWithAutoDetect.mockResolvedValue(aiResult);
-      mockPoeClient.translate.mockResolvedValue('Hello');
+      mockPoeClient.detectLanguage.mockResolvedValue('zh');
+      mockPoeClient.translate
+        .mockResolvedValueOnce('こんにちは')
+        .mockResolvedValueOnce('Hello');
 
       const results = await service.multiTranslate(text);
 
       expect(results).toHaveLength(2);
 
-      // 日本語はAI検出結果を再利用
+      // 日本語翻訳
       expect(results[0]).toMatchObject({
         status: 'success',
         sourceLang: 'zh',
@@ -464,7 +453,7 @@ describe('TranslationService - AI言語検出モード', () => {
         translatedText: 'こんにちは',
       });
 
-      // 英語は別途取得
+      // 英語翻訳
       expect(results[1]).toMatchObject({
         status: 'success',
         sourceLang: 'zh',
@@ -473,55 +462,65 @@ describe('TranslationService - AI言語検出モード', () => {
       });
     });
 
-    it('辞書ヒントがAI検出に渡される', async () => {
-      const text = 'Strinovaは楽しい';
+    it('targets指定ありの場合、指定した言語のみに翻訳する', async () => {
+      const text = 'こんにちは';
+      const targets: MultiTranslateTarget[] = [{ lang: 'zh' }];
 
-      mockLanguageDetector.detect.mockReturnValue('ja');
-      mockDictionaryService.findMatches.mockReturnValue([
-        {
-          entry: {
-            id: 'strinova',
-            aliases: { ja: ['ストリノヴァ'], zh: ['卡拉彼丘'] },
-            targets: { ja: 'ストリノヴァ', zh: '卡拉彼丘' },
-            category: 'game_name',
-          },
-          matchedLanguage: 'ja',
-          matchedTerm: 'Strinova',
-          targetTerm: '卡拉彼丘',
-          targetLanguage: 'zh',
-        },
-      ]);
-      mockDictionaryService.generatePromptHint.mockReturnValue(
-        'Strinova → 卡拉彼丘'
-      );
+      mockPoeClient.detectLanguage.mockResolvedValue('ja');
+      mockPoeClient.translate.mockResolvedValue('你好');
 
-      const aiResult: AutoDetectResult = {
-        translatedText: '卡拉彼丘很有趣',
+      const results = await service.multiTranslate(text, targets);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({
+        status: 'success',
         sourceLang: 'ja',
         targetLang: 'zh',
-      };
-      mockPoeClient.translateWithAutoDetect.mockResolvedValue(aiResult);
-      mockPoeClient.translate.mockResolvedValue('Strinova is fun');
+        translatedText: '你好',
+      });
 
-      await service.multiTranslate(text);
-
-      // translateWithAutoDetectに辞書ヒントが渡される
-      expect(mockPoeClient.translateWithAutoDetect).toHaveBeenCalledWith(
-        text,
-        'Strinova → 卡拉彼丘'
-      );
+      // translate()は1回のみ
+      expect(mockPoeClient.translate).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('AI検出失敗時のフォールバック', () => {
-    it('UnsupportedLanguageErrorの場合は全結果がエラーになる', async () => {
-      const text = 'Hello world';
+  describe('AI検出でunsupportedが返る場合のフォールバック', () => {
+    it('unsupportedの場合はルールベースにフォールバックして翻訳する', async () => {
+      const text = 'こんにちは'; // 日本語
 
-      // detectSimpleLanguage()はunknownを返すので辞書ヒントはなし
+      mockPoeClient.detectLanguage.mockResolvedValue('unsupported');
+      mockLanguageDetector.detect.mockReturnValue('ja');
+      mockPoeClient.translate
+        .mockResolvedValueOnce('你好')
+        .mockResolvedValueOnce('Hello');
+
+      const results = await service.multiTranslate(text);
+
+      expect(results).toHaveLength(2);
+      expect(results[0]).toMatchObject({
+        status: 'success',
+        sourceLang: 'ja',
+        targetLang: 'zh',
+        translatedText: '你好',
+      });
+      expect(results[1]).toMatchObject({
+        status: 'success',
+        sourceLang: 'ja',
+        targetLang: 'en',
+        translatedText: 'Hello',
+      });
+
+      // ルールベース検出が呼ばれる
+      expect(mockLanguageDetector.detect).toHaveBeenCalledWith(text);
+      // translate()が2回呼ばれる
+      expect(mockPoeClient.translate).toHaveBeenCalledTimes(2);
+    });
+
+    it('unsupported+ルールベースもunknownの場合はエラーになる', async () => {
+      const text = 'Hello world'; // 英語
+
+      mockPoeClient.detectLanguage.mockResolvedValue('unsupported');
       mockLanguageDetector.detect.mockReturnValue('unknown');
-      mockPoeClient.translateWithAutoDetect.mockRejectedValue(
-        new UnsupportedLanguageError('Unsupported language')
-      );
 
       const results = await service.multiTranslate(text);
 
@@ -530,19 +529,45 @@ describe('TranslationService - AI言語検出モード', () => {
         expect(result.status).toBe('error');
         if (result.status === 'error') {
           expect(result.errorCode).toBe(ErrorCode.INVALID_INPUT);
-          expect(result.errorMessage).toBe('Language not supported');
+          expect(result.errorMessage).toBe('Language could not be detected');
         }
       });
 
-      // translateWithAutoDetect失敗後はルールベース検出にフォールバックしない（UnsupportedLanguageErrorは即座に全エラー）
-      // ただし辞書ヒント準備のためにdetectが呼ばれることはある
+      // translate()は呼ばれない
       expect(mockPoeClient.translate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('AI検出失敗時のフォールバック', () => {
+    it('UnsupportedLanguageErrorの場合もルールベースにフォールバックする', async () => {
+      const text = 'こんにちは'; // 日本語
+
+      mockPoeClient.detectLanguage.mockRejectedValue(
+        new UnsupportedLanguageError('Unsupported language')
+      );
+      mockLanguageDetector.detect.mockReturnValue('ja');
+      mockPoeClient.translate
+        .mockResolvedValueOnce('你好')
+        .mockResolvedValueOnce('Hello');
+
+      const results = await service.multiTranslate(text);
+
+      expect(results).toHaveLength(2);
+      expect(results[0]).toMatchObject({
+        status: 'success',
+        sourceLang: 'ja',
+        targetLang: 'zh',
+        translatedText: '你好',
+      });
+
+      // ルールベース検出が呼ばれる
+      expect(mockLanguageDetector.detect).toHaveBeenCalledWith(text);
     });
 
     it('その他のエラーの場合はルールベース検出にフォールバックする', async () => {
       const text = 'こんにちは';
 
-      mockPoeClient.translateWithAutoDetect.mockRejectedValue(
+      mockPoeClient.detectLanguage.mockRejectedValue(
         new Error('API timeout')
       );
       mockLanguageDetector.detect.mockReturnValue('ja');
@@ -568,40 +593,46 @@ describe('TranslationService - AI言語検出モード', () => {
 
       // ルールベース検出が呼ばれる
       expect(mockLanguageDetector.detect).toHaveBeenCalledWith(text);
-      // translate()が2回呼ばれる（AI結果の再利用なし）
+      // translate()が2回呼ばれる
       expect(mockPoeClient.translate).toHaveBeenCalledTimes(2);
+    });
+
+    it('ルールベースフォールバック後もunknownの場合は全エラー', async () => {
+      const text = 'Unknown text';
+
+      mockPoeClient.detectLanguage.mockRejectedValue(
+        new Error('API timeout')
+      );
+      mockLanguageDetector.detect.mockReturnValue('unknown');
+
+      const results = await service.multiTranslate(text);
+
+      expect(results).toHaveLength(2);
+      results.forEach((result) => {
+        expect(result.status).toBe('error');
+        if (result.status === 'error') {
+          expect(result.errorCode).toBe(ErrorCode.INVALID_INPUT);
+          expect(result.errorMessage).toBe('Language could not be detected');
+        }
+      });
     });
   });
 
-  describe('AI検出結果の再利用', () => {
-    it('AI検出で取得した翻訳結果は再度translate()を呼ばない', async () => {
+  describe('レート制限', () => {
+    it('detectLanguage()とtranslate()の両方でレート制限が適用される', async () => {
       const text = 'こんにちは';
-      const targets: MultiTranslateTarget[] = [
-        { lang: 'zh' }, // AI検出で取得済み
-        { lang: 'en' },
-      ];
 
-      const aiResult: AutoDetectResult = {
-        translatedText: '你好',
-        sourceLang: 'ja',
-        targetLang: 'zh',
-      };
-      mockPoeClient.translateWithAutoDetect.mockResolvedValue(aiResult);
-      mockPoeClient.translate.mockResolvedValueOnce('Hello');
+      mockPoeClient.detectLanguage.mockResolvedValue('ja');
+      mockPoeClient.translate
+        .mockResolvedValueOnce('你好')
+        .mockResolvedValueOnce('Hello');
 
-      const results = await service.multiTranslate(text, targets);
+      await service.multiTranslate(text);
 
-      expect(results).toHaveLength(2);
-
-      // 中国語はAI検出結果を再利用
-      expect(results[0]).toMatchObject({
-        status: 'success',
-        targetLang: 'zh',
-        translatedText: '你好',
-      });
-
-      // translate()は英語のみ（1回）
-      expect(mockPoeClient.translate).toHaveBeenCalledTimes(1);
+      // detectLanguage()用に1回 + translate()用に2回 = 3回acquire
+      expect(mockRateLimiter.acquire).toHaveBeenCalledTimes(3);
+      // release()も3回
+      expect(mockRateLimiter.release).toHaveBeenCalledTimes(3);
     });
   });
 });
