@@ -10,18 +10,6 @@ interface PoeApiResponse {
   }>;
 }
 
-/**
- * AI言語検出 + 翻訳の結果
- */
-export interface AutoDetectResult {
-  /** 翻訳されたテキスト */
-  translatedText: string;
-  /** 検出されたソース言語 */
-  sourceLang: 'ja' | 'zh';
-  /** 翻訳先言語 */
-  targetLang: 'ja' | 'zh';
-}
-
 export class PoeApiClient {
   private readonly maxRetries = 3;
   private readonly baseDelay = 1000; // 1秒
@@ -134,7 +122,17 @@ IMPORTANT RULES:
 - Output ONLY the translated text in ${targetLanguage}
 - Do NOT add explanations, notes, or any additional text
 - Do NOT echo the source text
-- The output must be in ${targetLanguage}, not ${sourceLanguage}`;
+- The output must be in ${targetLanguage}, not ${sourceLanguage}
+
+CRITICAL - You are a TRANSLATOR, not an assistant:
+- NEVER answer questions, even if the input is a question
+- NEVER provide explanations, analysis, or background information
+- Just translate the text literally, preserving the original meaning and tone
+- If the input is a question, the output must also be a question
+
+Examples of correct translation:
+- Input: 这是真的吗？ → Output: これは本当ですか？
+- Input: なぜそうなるの？ → Output: 为什么会这样？`;
 
     // 辞書ヒントがある場合は追加
     if (dictionaryHint && dictionaryHint.trim() !== '') {
@@ -169,7 +167,17 @@ STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
 3. Output MUST be in ${targetLanguage} ONLY
 4. Do NOT include any explanations or notes
 5. Do NOT echo the source text
-6. The translation MUST contain ${targetLanguage} characters`;
+6. The translation MUST contain ${targetLanguage} characters
+
+CRITICAL - You are a TRANSLATOR, not an assistant:
+7. NEVER answer questions, even if the input is a question
+8. NEVER provide explanations, analysis, or background information about the content
+9. Just translate the text literally, preserving the original meaning and tone
+10. If the input is a question, the output must also be a question
+
+Examples of correct translation:
+- Input: 这是真的吗？ → Output: これは本当ですか？
+- Input: なぜそうなるの？ → Output: 为什么会这样？`;
 
     // 辞書ヒントがある場合は追加
     if (dictionaryHint && dictionaryHint.trim() !== '') {
@@ -250,7 +258,7 @@ STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
 
   /**
    * APIレスポンスから生のコンテンツを抽出（検証なし）
-   * translateWithAutoDetectで使用
+   * detectLanguageで使用
    */
   private extractRawContent(response: PoeApiResponse): string {
     if (
@@ -355,56 +363,34 @@ STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
   }
 
   /**
-   * AI言語検出 + 翻訳（言語を自動検出して翻訳を実行）
-   * @param text 翻訳対象のテキスト
-   * @param dictionaryHint 辞書から生成されたヒント（オプション）
-   * @returns 翻訳結果と検出された言語情報
-   * @throws {UnsupportedLanguageError} 未対応言語の場合
-   * @throws {ValidationError} AI出力が不正な場合
+   * AI言語検出（言語を検出するのみ、翻訳は行わない）
+   * リトライロジック付き
+   * @param text 検出対象のテキスト
+   * @returns 'ja' | 'zh' | 'unsupported'
    * @throws {TranslationError} API呼び出しが失敗した場合
    */
-  async translateWithAutoDetect(text: string, dictionaryHint?: string): Promise<AutoDetectResult> {
-    let lastError: Error | null = null;
-    let useStrongerPrompt = false;
+  async detectLanguage(text: string): Promise<'ja' | 'zh' | 'unsupported'> {
+    let lastError: TranslationError | null = null;
 
-    // リトライループ（最大3回）
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
-        const { translatedText, sourceLang, targetLang } = await this.executeAutoDetectTranslation(
-          text,
-          dictionaryHint,
-          useStrongerPrompt
-        );
-        return { translatedText, sourceLang, targetLang };
+        return await this.executeDetectLanguage(text);
       } catch (error) {
-        lastError = error as Error;
-
-        // UnsupportedLanguageErrorはリトライしない（言語が未対応なのは確定）
-        if (
-          error instanceof Error &&
-          error.name === 'UnsupportedLanguageError'
-        ) {
-          throw error;
-        }
-
-        // リトライしないエラー（認証エラー、無効入力、API形式エラー）
+        // 認証エラーはリトライしない
         if (error instanceof TranslationError && this.shouldNotRetry(error)) {
           throw error;
         }
 
-        // 最後の試行でエラーが発生した場合
+        lastError = error instanceof TranslationError
+          ? error
+          : new TranslationError(
+              'Network error during language detection',
+              ErrorCode.NETWORK_ERROR,
+              error as Error
+            );
+
         if (attempt === this.maxRetries) {
           break;
-        }
-
-        // ValidationErrorの場合は次回強化プロンプトを使用
-        if (
-          error instanceof Error &&
-          (error.name === 'ValidationError' ||
-            (error instanceof TranslationError &&
-              error.code === ErrorCode.VALIDATION_ERROR))
-        ) {
-          useStrongerPrompt = true;
         }
 
         // 待機時間を決定
@@ -415,25 +401,13 @@ STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
           (error as any).retryAfter
         ) {
           delay = (error as any).retryAfter * 1000;
-          logger.warn(`Rate limit hit in autoDetect, retrying after ${delay}ms`, {
+          logger.warn(`Rate limit hit in detectLanguage, retrying after ${delay}ms`, {
             attempt: attempt + 1,
             maxRetries: this.maxRetries,
-          });
-        } else if (
-          error instanceof Error &&
-          (error.name === 'ValidationError' ||
-            (error instanceof TranslationError &&
-              error.code === ErrorCode.VALIDATION_ERROR))
-        ) {
-          delay = 500;
-          logger.warn(`Validation error in autoDetect, retrying with stronger prompt in ${delay}ms`, {
-            attempt: attempt + 1,
-            maxRetries: this.maxRetries,
-            errorMessage: error.message,
           });
         } else {
           delay = this.calculateBackoff(attempt);
-          logger.warn(`API call failed in autoDetect, retrying in ${delay}ms`, {
+          logger.warn(`detectLanguage failed, retrying in ${delay}ms`, {
             attempt: attempt + 1,
             maxRetries: this.maxRetries,
             errorMessage: error instanceof Error ? error.message : String(error),
@@ -444,98 +418,29 @@ STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
       }
     }
 
-    // 最後のエラーを再スロー（TranslationErrorでない場合はラップ）
-    if (lastError instanceof TranslationError) {
-      throw lastError;
-    }
-    if (
-      lastError instanceof Error &&
-      (lastError.name === 'ValidationError' ||
-        lastError.name === 'UnsupportedLanguageError')
-    ) {
-      throw lastError;
-    }
-    throw new TranslationError(
-      'Network error during AI detection',
-      ErrorCode.NETWORK_ERROR,
-      lastError as Error
-    );
+    throw lastError!;
   }
 
   /**
-   * AI言語検出 + 翻訳の実際の実行（リトライなし）
+   * AI言語検出の実際の実行（リトライなし）
    */
-  private async executeAutoDetectTranslation(
-    text: string,
-    dictionaryHint?: string,
-    useStrongerPrompt: boolean = false
-  ): Promise<AutoDetectResult> {
-    const systemMessage = useStrongerPrompt
-      ? `You are a precise translation engine. This is CRITICAL.
-STRICT REQUIREMENTS (FAILURE TO COMPLY WILL RESULT IN ERROR):
-1. Detect if input is Japanese or Chinese
-2. Japanese → translate to Chinese (Simplified)
-3. Chinese → translate to Japanese
-4. Other languages → output exactly "UNSUPPORTED_LANGUAGE"
-5. NEVER return the original text unchanged
-6. Output MUST contain Japanese or Chinese characters`
-      : `You are a precise translation engine for Japanese and Chinese languages.
-Your task is to detect the input language and translate accordingly.
-You must follow the output format exactly.`;
+  private async executeDetectLanguage(text: string): Promise<'ja' | 'zh' | 'unsupported'> {
+    const systemMessage = `あなたは入力テキストの言語を判定するアシスタントです。
+日本語・中国語・その他の言語を判定します。`;
 
-    let userPrompt = useStrongerPrompt
-      ? `CRITICAL: Detect language and translate:
-- Japanese → Chinese (Simplified)
-- Chinese → Japanese
-- Other → "UNSUPPORTED_LANGUAGE"
+    const userPrompt = `以下のテキストの言語を判定してください。
 
-STRICT RULES:
-1. Output ONLY the translation, no explanations
-2. NEVER echo or return the source text
-3. No markdown, quotes, or formatting
-4. Output MUST be different from input`
-      : `Detect the language and translate:
-- Japanese → Chinese (Simplified)
-- Chinese → Japanese
-- Other languages → output exactly "UNSUPPORTED_LANGUAGE"
+ルール:
+- 日本語なら "ja" を返す
+- 中国語（簡体字・繁体字）なら "zh" を返す
+- それ以外なら "unsupported" を返す
 
-Rules:
-1. Output ONLY the translation text, no explanations
-2. Do not echo the source text
-3. Do not add markdown, quotes, or formatting
-4. For mixed-language text, translate only JP/ZH parts`;
+重要: 単語1つのみを出力してください。説明や引用は不要です。
 
-    userPrompt += `
-
-Examples:
-
-Input: こんにちは
-Output: 你好
-
-Input: 你好
-Output: こんにちは
-
-Input: Hello World
-Output: UNSUPPORTED_LANGUAGE
-
-Input: 今日はいい天気ですね
-Output: 今天天気很好呢
-
-Input: 这个东西坏了
-Output: これは壊れました`;
-
-    // 辞書ヒントがある場合は追加
-    if (dictionaryHint && dictionaryHint.trim() !== '') {
-      userPrompt += `\n\n${dictionaryHint}`;
-    }
-
-    userPrompt += `\n\nNow translate:\n${text}`;
-
-    if (useStrongerPrompt) {
-      logger.info('Using stronger prompt for autoDetect validation error retry', {
-        textLength: text.length,
-      });
-    }
+テキスト:
+"""
+${text}
+"""`;
 
     const response = await fetch(this.endpointUrl, {
       method: 'POST',
@@ -550,7 +455,7 @@ Output: これは壊れました`;
           { role: 'user', content: userPrompt },
         ],
         temperature: 0,
-        max_tokens: 1000,
+        max_tokens: 10,
       }),
     });
 
@@ -561,8 +466,6 @@ Output: これは壊れました`;
       let errorCode: ErrorCode;
       if (statusCode === 401 || statusCode === 403) {
         errorCode = ErrorCode.AUTH_ERROR;
-      } else if (statusCode === 400) {
-        errorCode = ErrorCode.INVALID_INPUT;
       } else if (statusCode === 429) {
         errorCode = ErrorCode.RATE_LIMIT;
       } else if (statusCode >= 500) {
@@ -572,7 +475,7 @@ Output: これは壊れました`;
       }
 
       const error = new TranslationError(
-        `Poe API Error: ${statusCode} ${response.statusText} - ${errorText}`,
+        `Language detection API Error: ${statusCode} ${response.statusText} - ${errorText}`,
         errorCode
       );
 
@@ -588,183 +491,37 @@ Output: これは壊れました`;
     const data = (await response.json()) as PoeApiResponse;
     const rawContent = this.extractRawContent(data);
 
-    // バリデーション: 既知のフィラー文をスキップして翻訳結果を抽出
-    const lines = rawContent.trim().split('\n');
+    logger.debug('Language detection result', {
+      textSample: text.substring(0, 50),
+      rawResult: rawContent,
+    });
 
-    // フィラー文のパターン（英語の説明文など）
-    const FILLER_PATTERNS = [
-      /^(Sure|Here|Okay|Alright|OK)[,:\s]/i,
-      /^(the\s+)?(Translation|Translated|Result)[:\s]/i,
-      /^(The translation is|Here's the translation|is the translation|is the result)[:\s]/i,
-      /^(here is|here's|this is|is the)[:\s]/i,
-    ];
-
-    // フィラー文を除去して翻訳結果を抽出
-    const resultLines: string[] = [];
-    let inFillerSection = true;
-
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-
-      // 空行はフィラーセクション中はスキップ、翻訳セクション中は保持
-      if (trimmedLine.length === 0) {
-        if (!inFillerSection) {
-          resultLines.push('');
-        }
-        continue;
-      }
-
-      // フィラー文を繰り返し除去（同じ行に複数のフィラーパターンがある場合に対応）
-      let cleanedLine = trimmedLine;
-      let hadMatch = false;
-      let keepChecking = true;
-
-      while (keepChecking && cleanedLine.length > 0) {
-        keepChecking = false;
-        for (const pattern of FILLER_PATTERNS) {
-          const match = pattern.exec(cleanedLine);
-          if (match) {
-            hadMatch = true;
-            cleanedLine = cleanedLine.substring(match[0].length).trim();
-            keepChecking = true; // 再度チェック
-            break;
-          }
-        }
-      }
-
-      // フィラー除去後に何か残っている、または非フィラー行の場合
-      if (cleanedLine.length > 0) {
-        inFillerSection = false;
-        resultLines.push(cleanedLine);
-      } else if (hadMatch) {
-        // フィラー文のみの行、フィラーセクション継続
-        continue;
-      } else {
-        // 非フィラー行
-        inFillerSection = false;
-        resultLines.push(cleanedLine);
-      }
-    }
-
-    // 結果を結合
-    let result = resultLines.join('\n').trim();
-
-    // UNSUPPORTED_LANGUAGEの特別処理
-    if (result === 'UNSUPPORTED_LANGUAGE') {
-      const { UnsupportedLanguageError } = await import('./errors');
-      throw new UnsupportedLanguageError(
-        'Language not supported by AI detection'
-      );
-    }
-
-    // 空の結果、または英語のみの結果はバリデーションエラー
-    if (!result || result.length === 0) {
-      const { ValidationError } = await import('./errors');
-      throw new ValidationError('AI returned empty translation');
-    }
-
-    // 結果が英語のみ（日本語・中国語の文字を含まない）の場合はバリデーションエラー
-    const hasJapaneseChinese = /[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/.test(
-      result
-    );
-    if (!hasJapaneseChinese) {
-      const { ValidationError } = await import('./errors');
-      throw new ValidationError(
-        `AI returned non-Japanese/Chinese text: ${result}`
-      );
-    }
-
-    // 元テキストと同一の場合はバリデーションエラー
-    if (result === text) {
-      const { ValidationError } = await import('./errors');
-      throw new ValidationError(
-        'Translation failed: output is identical to input'
-      );
-    }
-
-    // 言語を推定：入力テキストと出力テキストの文字種から判定
-    const { sourceLang, targetLang } = this.inferLanguages(text, result);
-
-    return { translatedText: result, sourceLang, targetLang };
+    // 結果をパース（寛容なパース：バッククォート、引用符、句読点を除去）
+    return this.parseDetectedLanguage(rawContent);
   }
 
   /**
-   * 入力テキストと出力テキストから言語を推定
-   * AIが日本語→中国語、中国語→日本語で翻訳するため、
-   * 出力の文字種から逆算してソース言語を特定
-   *
-   * LanguageDetectorと同等のロジックを使用して一貫性を保つ
+   * 言語検出結果をパース（寛容なパース）
+   * バッククォート、引用符、句読点などを除去してja/zh/unsupportedに変換
    */
-  private inferLanguages(inputText: string, outputText: string): { sourceLang: 'ja' | 'zh'; targetLang: 'ja' | 'zh' } {
-    // 出力にひらがな・カタカナがあれば日本語への翻訳（ソースは中国語）
-    const outputHasKana = /[\u3040-\u309f\u30a0-\u30ff]/.test(outputText);
-    if (outputHasKana) {
-      return { sourceLang: 'zh', targetLang: 'ja' };
+  private parseDetectedLanguage(rawContent: string): 'ja' | 'zh' | 'unsupported' {
+    // 前後の空白を除去し、小文字に変換
+    let cleaned = rawContent.trim().toLowerCase();
+
+    // バッククォート、引用符、句読点を除去
+    cleaned = cleaned.replace(/[`"'.\s]/g, '');
+
+    // 'ja'または'japanese'で始まる場合は日本語
+    if (cleaned === 'ja' || cleaned.startsWith('ja') || cleaned === 'japanese') {
+      return 'ja';
     }
 
-    // 入力にひらがな・カタカナがあれば日本語からの翻訳（ターゲットは中国語）
-    const inputHasKana = /[\u3040-\u309f\u30a0-\u30ff]/.test(inputText);
-    if (inputHasKana) {
-      return { sourceLang: 'ja', targetLang: 'zh' };
+    // 'zh'または'chinese'で始まる場合は中国語
+    if (cleaned === 'zh' || cleaned.startsWith('zh') || cleaned === 'chinese') {
+      return 'zh';
     }
 
-    // 簡体字パターン（LanguageDetectorと同じ）
-    const simplifiedPattern = /[坏弄彻过这为们务产实际关现发经边园讲头儿岁块钱习视听说读写飞机场站脑网络爱买卖师爷奶妈爸孩样啊哦吗呢嘛]/;
-
-    // 入力に簡体字があれば中国語からの翻訳
-    if (simplifiedPattern.test(inputText)) {
-      return { sourceLang: 'zh', targetLang: 'ja' };
-    }
-
-    // 出力に簡体字があれば中国語への翻訳
-    if (simplifiedPattern.test(outputText)) {
-      return { sourceLang: 'ja', targetLang: 'zh' };
-    }
-
-    // 日本語句読点パターン（「、」「」『』・は日本語固有）
-    const japaneseOnlyPunctuation = /[、「」『』・]/;
-
-    // 入力に日本語固有の句読点があれば日本語からの翻訳
-    if (japaneseOnlyPunctuation.test(inputText)) {
-      return { sourceLang: 'ja', targetLang: 'zh' };
-    }
-
-    // 出力に日本語固有の句読点があれば日本語への翻訳
-    if (japaneseOnlyPunctuation.test(outputText)) {
-      return { sourceLang: 'zh', targetLang: 'ja' };
-    }
-
-    // 中国語句読点パターン（，！？；：は中国語固有）
-    const chineseOnlyPunctuation = /[，！？；：""''【】（）]/;
-
-    // 入力に中国語固有の句読点があれば中国語からの翻訳
-    if (chineseOnlyPunctuation.test(inputText)) {
-      return { sourceLang: 'zh', targetLang: 'ja' };
-    }
-
-    // 出力に中国語固有の句読点があれば中国語への翻訳
-    if (chineseOnlyPunctuation.test(outputText)) {
-      return { sourceLang: 'ja', targetLang: 'zh' };
-    }
-
-    // 中国語文法パターン（LanguageDetectorと同じ）
-    const zhGrammarPattern = /在.{0,3}[去来到看说写读听]|或者|一般会|当地|会[去来到说写读听看]|[要用再了吗呢啊哦嘛]/;
-
-    // 入力に中国語文法パターンがあれば中国語からの翻訳
-    if (zhGrammarPattern.test(inputText)) {
-      return { sourceLang: 'zh', targetLang: 'ja' };
-    }
-
-    // 日本語特有パターン（LanguageDetectorと同じ）
-    const jpSpecificPattern = /日本語|日本人|時間|会社|東京|大阪|京都|北海道/;
-
-    // 入力に日本語特有パターンがあれば日本語からの翻訳
-    if (jpSpecificPattern.test(inputText)) {
-      return { sourceLang: 'ja', targetLang: 'zh' };
-    }
-
-    // デフォルト：漢字のみで判断できない場合は中国語→日本語
-    // （簡体字圏の方が漢字のみで書く傾向が強いため）
-    return { sourceLang: 'zh', targetLang: 'ja' };
+    // それ以外はunsupported
+    return 'unsupported';
   }
 }
