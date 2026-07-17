@@ -676,7 +676,7 @@ const BotConfigSchema = z.object({
   poe: z.object({
     apiKey: z.string().min(1, 'Poe API key is required'),
     endpointUrl: z.string().url().default('https://api.poe.com/v1/chat/completions'),
-    modelName: z.string().default('Claude-3.5-Sonnet'),
+    modelName: z.string().default('gpt-5.4-nano'),
   }),
   rateLimiter: z.object({
     maxConcurrent: z.number().positive().default(1),
@@ -839,7 +839,7 @@ TARGET_CHANNELS=channel_id_1,channel_id_2
 # Poe API設定
 POE_API_KEY=your_poe_api_key_here
 POE_ENDPOINT_URL=https://api.poe.com/v1/chat/completions
-POE_MODEL_NAME=Claude-3.5-Sonnet
+POE_MODEL_NAME=gpt-5.4-nano
 
 # レート制限設定
 RATE_LIMIT_CONCURRENT=1

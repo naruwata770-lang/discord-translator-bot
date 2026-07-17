@@ -11,7 +11,7 @@ export const envSchema = z.object({
     .string()
     .url()
     .default('https://api.poe.com/v1/chat/completions'),
-  POE_MODEL_NAME: z.string().default('Claude-3.5-Sonnet'),
+  POE_MODEL_NAME: z.string().default('gpt-5.4-nano'),
 
   // レート制限設定
   RATE_LIMIT_CONCURRENT: z
