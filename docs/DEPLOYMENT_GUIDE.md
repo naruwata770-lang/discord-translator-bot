@@ -209,7 +209,7 @@ https://railway.app/
 | `TARGET_CHANNELS` | `123456,789012` | カンマ区切りのチャンネルID |
 | `POE_API_KEY` | `YOUR_POE_API_KEY` | Poeで取得 |
 | `POE_ENDPOINT_URL` | `https://api.poe.com/v1/chat/completions` | デフォルト |
-| `POE_MODEL_NAME` | `Claude-3.5-Sonnet` | 使用するモデル |
+| `POE_MODEL_NAME` | `gpt-5.4-nano` | 使用するモデル |
 | `RATE_LIMIT_CONCURRENT` | `1` | 同時リクエスト数 |
 | `RATE_LIMIT_INTERVAL` | `1000` | 最小間隔（ミリ秒） |
 | `LOG_LEVEL` | `info` | ログレベル |
