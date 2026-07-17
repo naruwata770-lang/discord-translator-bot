@@ -69,9 +69,9 @@ export class PoeApiClient {
         let delay: number;
         if (
           lastError.code === ErrorCode.RATE_LIMIT &&
-          (lastError as any).retryAfter
+          lastError.retryAfter
         ) {
-          delay = (lastError as any).retryAfter * 1000; // 秒をミリ秒に変換
+          delay = lastError.retryAfter * 1000; // 秒をミリ秒に変換
           logger.warn(`Rate limit hit, retrying after ${delay}ms`, {
             attempt: attempt + 1,
             maxRetries: this.maxRetries,
@@ -234,7 +234,7 @@ Examples of correct translation:
         // Retry-Afterヘッダーを保存
         const retryAfter = response.headers.get('Retry-After');
         if (retryAfter) {
-          (error as any).retryAfter = parseInt(retryAfter, 10);
+          error.retryAfter = parseInt(retryAfter, 10);
         }
 
         throw error;
@@ -398,9 +398,9 @@ Examples of correct translation:
         if (
           error instanceof TranslationError &&
           error.code === ErrorCode.RATE_LIMIT &&
-          (error as any).retryAfter
+          error.retryAfter
         ) {
-          delay = (error as any).retryAfter * 1000;
+          delay = error.retryAfter * 1000;
           logger.warn(`Rate limit hit in detectLanguage, retrying after ${delay}ms`, {
             attempt: attempt + 1,
             maxRetries: this.maxRetries,
@@ -455,7 +455,8 @@ ${text}
           { role: 'user', content: userPrompt },
         ],
         temperature: 0,
-        max_tokens: 10,
+        // Poe OpenAI互換APIのgpt-5.4系はmax_tokens最小値16を要求するため余裕を持たせる
+        max_tokens: 100,
       }),
     });
 
@@ -482,7 +483,7 @@ ${text}
       // Retry-Afterヘッダーを保存
       const retryAfter = response.headers.get('Retry-After');
       if (retryAfter) {
-        (error as any).retryAfter = parseInt(retryAfter, 10);
+        error.retryAfter = parseInt(retryAfter, 10);
       }
 
       throw error;

@@ -5,6 +5,22 @@ import { ErrorCode } from '../types';
 // fetch のモック
 global.fetch = jest.fn();
 
+// fetchに渡されたリクエストボディを型付きで取り出すヘルパー
+interface PoeRequestBody {
+  model: string;
+  messages: { role: string; content: string }[];
+  temperature?: number;
+  max_tokens?: number;
+}
+
+function getRequestBody(callIndex: number): PoeRequestBody {
+  const calls = (global.fetch as jest.Mock).mock.calls as [
+    string,
+    { body: string },
+  ][];
+  return JSON.parse(calls[callIndex][1].body) as PoeRequestBody;
+}
+
 describe('PoeApiClient', () => {
   let client: PoeApiClient;
   const mockApiKey = 'test-api-key';
@@ -34,7 +50,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.translate('こんにちは', 'ja', 'zh');
@@ -48,7 +64,7 @@ describe('PoeApiClient', () => {
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
             Authorization: `Bearer ${mockApiKey}`,
-          }),
+          }) as Record<string, string>,
         })
       );
     });
@@ -61,13 +77,12 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       await client.translate('こんにちは', 'ja', 'en');
 
-      const callArgs = (global.fetch as jest.Mock).mock.calls[0][1];
-      const body = JSON.parse(callArgs.body);
+      const body = getRequestBody(0);
 
       expect(body.messages[0].content).toContain('Japanese');
       expect(body.messages[0].content).toContain('English');
@@ -90,7 +105,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const dictionaryHint = 'Use these translations for specific terms:\n- 卡拉彼丘 → カラピチュー';
@@ -99,8 +114,7 @@ describe('PoeApiClient', () => {
 
       expect(result).toBe('カラピチューは強い');
 
-      const callArgs = (global.fetch as jest.Mock).mock.calls[0][1];
-      const body = JSON.parse(callArgs.body);
+      const body = getRequestBody(0);
 
       // プロンプトに辞書ヒントが含まれているか確認
       expect(body.messages[0].content).toContain(dictionaryHint);
@@ -116,15 +130,14 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.translate('こんにちは', 'ja', 'zh');
 
       expect(result).toBe('你好');
 
-      const callArgs = (global.fetch as jest.Mock).mock.calls[0][1];
-      const body = JSON.parse(callArgs.body);
+      const body = getRequestBody(0);
 
       // 辞書関連の内容がプロンプトに含まれていないことを確認
       expect(body.messages[0].content).not.toContain('Use these translations');
@@ -137,7 +150,7 @@ describe('PoeApiClient', () => {
         ok: false,
         status: 401,
         statusText: 'Unauthorized',
-        text: async () => 'Invalid API key',
+        text: () => Promise.resolve('Invalid API key'),
         headers: {
           get: () => null,
         },
@@ -161,7 +174,7 @@ describe('PoeApiClient', () => {
         ok: false,
         status: 429,
         statusText: 'Too Many Requests',
-        text: async () => 'Rate limit exceeded',
+        text: () => Promise.resolve('Rate limit exceeded'),
         headers: {
           get: (name: string) => (name === 'Retry-After' ? '5' : null),
         },
@@ -185,7 +198,7 @@ describe('PoeApiClient', () => {
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
-        text: async () => 'Server error',
+        text: () => Promise.resolve('Server error'),
         headers: {
           get: () => null,
         },
@@ -218,7 +231,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ invalid: 'response' }),
+        json: () => Promise.resolve(({ invalid: 'response' })),
       });
 
       try {
@@ -238,7 +251,7 @@ describe('PoeApiClient', () => {
           ok: false,
           status: 500,
           statusText: 'Internal Server Error',
-          text: async () => 'Error',
+          text: () => Promise.resolve('Error'),
           headers: {
             get: () => null,
           },
@@ -247,7 +260,7 @@ describe('PoeApiClient', () => {
           ok: false,
           status: 500,
           statusText: 'Internal Server Error',
-          text: async () => 'Error',
+          text: () => Promise.resolve('Error'),
           headers: {
             get: () => null,
           },
@@ -255,7 +268,7 @@ describe('PoeApiClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: '成功了' } }] }), // 中国語で成功
+          json: () => Promise.resolve(({ choices: [{ message: { content: '成功了' } }] })), // 中国語で成功
         });
 
       const result = await client.translate('テスト', 'ja', 'zh');
@@ -269,7 +282,7 @@ describe('PoeApiClient', () => {
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
-        text: async () => 'Persistent error',
+        text: () => Promise.resolve('Persistent error'),
         headers: {
           get: () => null,
         },
@@ -290,7 +303,7 @@ describe('PoeApiClient', () => {
           ok: false,
           status: 429,
           statusText: 'Too Many Requests',
-          text: async () => 'Rate limit',
+          text: () => Promise.resolve('Rate limit'),
           headers: {
             get: (name: string) => (name === 'Retry-After' ? '1' : null),
           },
@@ -299,7 +312,7 @@ describe('PoeApiClient', () => {
           ok: false,
           status: 429,
           statusText: 'Too Many Requests',
-          text: async () => 'Rate limit',
+          text: () => Promise.resolve('Rate limit'),
           headers: {
             get: (name: string) => (name === 'Retry-After' ? '2' : null),
           },
@@ -307,7 +320,7 @@ describe('PoeApiClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: '成功了' } }] }), // 中国語で成功
+          json: () => Promise.resolve(({ choices: [{ message: { content: '成功了' } }] })), // 中国語で成功
         });
 
       const result = await client.translate('テスト', 'ja', 'zh');
@@ -327,17 +340,17 @@ describe('PoeApiClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: '你好世界' } }] })),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: '你好世界' } }] })),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: 'こんにちは世界' } }] })),
         });
 
       const result = await client.translate('你好世界', 'zh', 'ja');
@@ -353,22 +366,22 @@ describe('PoeApiClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: '你好世界' } }] })),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: '你好世界' } }] })),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: '你好世界' } }] })),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: '你好世界' } }] })),
         });
 
       await expect(
@@ -383,7 +396,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+        json: () => Promise.resolve(({ choices: [{ message: { content: 'こんにちは世界' } }] })),
       });
 
       const result = await client.translate('你好世界', 'zh', 'ja');
@@ -401,12 +414,12 @@ describe('PoeApiClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: '你好世界' } }] })),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: 'こんにちは世界' } }] })),
         });
 
       const result = await client.translate('你好世界', 'zh', 'ja');
@@ -415,8 +428,7 @@ describe('PoeApiClient', () => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
 
       // 2回目のプロンプトには"STRICT REQUIREMENTS"が含まれている
-      const secondCallArgs = (global.fetch as jest.Mock).mock.calls[1][1];
-      const secondBody = JSON.parse(secondCallArgs.body);
+      const secondBody = getRequestBody(1);
       expect(secondBody.messages[0].content).toContain('STRICT REQUIREMENTS');
     });
 
@@ -428,7 +440,7 @@ describe('PoeApiClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: 'こんにちは世界' } }] })),
         });
 
       const result = await client.translate('你好世界', 'zh', 'ja');
@@ -437,8 +449,7 @@ describe('PoeApiClient', () => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
 
       // 2回目のプロンプトにも"STRICT REQUIREMENTS"は含まれない（通常プロンプト）
-      const secondCallArgs = (global.fetch as jest.Mock).mock.calls[1][1];
-      const secondBody = JSON.parse(secondCallArgs.body);
+      const secondBody = getRequestBody(1);
       expect(secondBody.messages[0].content).not.toContain('STRICT REQUIREMENTS');
       expect(secondBody.messages[0].content).toContain('IMPORTANT RULES');
     });
@@ -451,13 +462,13 @@ describe('PoeApiClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: '你好世界' } }] })),
         })
         .mockRejectedValueOnce(new Error('Network error'))
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: 'こんにちは世界' } }] })),
         });
 
       const result = await client.translate('你好世界', 'zh', 'ja');
@@ -466,12 +477,10 @@ describe('PoeApiClient', () => {
       expect(global.fetch).toHaveBeenCalledTimes(3);
 
       // 2回目・3回目ともに強化プロンプト
-      const secondCallArgs = (global.fetch as jest.Mock).mock.calls[1][1];
-      const secondBody = JSON.parse(secondCallArgs.body);
+      const secondBody = getRequestBody(1);
       expect(secondBody.messages[0].content).toContain('STRICT REQUIREMENTS');
 
-      const thirdCallArgs = (global.fetch as jest.Mock).mock.calls[2][1];
-      const thirdBody = JSON.parse(thirdCallArgs.body);
+      const thirdBody = getRequestBody(2);
       expect(thirdBody.messages[0].content).toContain('STRICT REQUIREMENTS');
     });
   });
@@ -487,12 +496,12 @@ describe('PoeApiClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: '你好世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: '你好世界' } }] })),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: 'こんにちは世界' } }] })),
         });
 
       const startTime = Date.now();
@@ -518,7 +527,7 @@ describe('PoeApiClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ choices: [{ message: { content: 'こんにちは世界' } }] }),
+          json: () => Promise.resolve(({ choices: [{ message: { content: 'こんにちは世界' } }] })),
         });
 
       const startTime = Date.now();
@@ -550,7 +559,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       await expect(
@@ -574,22 +583,22 @@ describe('PoeApiClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => mockResponse,
+          json: () => Promise.resolve(mockResponse),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => mockResponse,
+          json: () => Promise.resolve(mockResponse),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => mockResponse,
+          json: () => Promise.resolve(mockResponse),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => mockResponse,
+          json: () => Promise.resolve(mockResponse),
         });
 
       await expect(
@@ -613,22 +622,22 @@ describe('PoeApiClient', () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => mockResponse,
+          json: () => Promise.resolve(mockResponse),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => mockResponse,
+          json: () => Promise.resolve(mockResponse),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => mockResponse,
+          json: () => Promise.resolve(mockResponse),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => mockResponse,
+          json: () => Promise.resolve(mockResponse),
         });
 
       await expect(
@@ -650,7 +659,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.translate('你好世界', 'zh', 'ja');
@@ -671,7 +680,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.translate('Tokyo', 'en', 'ja');
@@ -692,7 +701,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.translate('こんにちは世界', 'ja', 'zh');
@@ -709,7 +718,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.detectLanguage('こんにちは');
@@ -717,10 +726,9 @@ describe('PoeApiClient', () => {
       expect(result).toBe('ja');
       expect(global.fetch).toHaveBeenCalledTimes(1);
 
-      const callArgs = (global.fetch as jest.Mock).mock.calls[0];
-      const body = JSON.parse(callArgs[1].body);
+      const body = getRequestBody(0);
       expect(body.temperature).toBe(0);
-      expect(body.max_tokens).toBe(10);
+      expect(body.max_tokens).toBe(100);
     });
 
     it('中国語テキストを正しく検出する', async () => {
@@ -731,7 +739,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.detectLanguage('你好');
@@ -747,7 +755,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.detectLanguage('Hello World');
@@ -763,7 +771,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.detectLanguage('こんにちは');
@@ -779,7 +787,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.detectLanguage('こんにちは');
@@ -794,7 +802,7 @@ describe('PoeApiClient', () => {
           ok: false,
           status: 500,
           statusText: 'Internal Server Error',
-          text: async () => 'Server Error',
+          text: () => Promise.resolve('Server Error'),
           headers: { get: () => null },
         });
       }
@@ -810,7 +818,7 @@ describe('PoeApiClient', () => {
         ok: false,
         status: 401,
         statusText: 'Unauthorized',
-        text: async () => 'Unauthorized',
+        text: () => Promise.resolve('Unauthorized'),
         headers: { get: () => null },
       });
 
@@ -849,7 +857,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.detectLanguage('안녕하세요');
@@ -865,7 +873,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.detectLanguage('こんにちは');
@@ -881,7 +889,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.detectLanguage('こんにちは');
@@ -897,7 +905,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.detectLanguage('こんにちは');
@@ -913,7 +921,7 @@ describe('PoeApiClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockResponse,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const result = await client.detectLanguage('你好');
@@ -931,13 +939,13 @@ describe('PoeApiClient', () => {
           ok: false,
           status: 500,
           statusText: 'Internal Server Error',
-          text: async () => 'Server Error',
+          text: () => Promise.resolve('Server Error'),
           headers: { get: () => null },
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => successResponse,
+          json: () => Promise.resolve(successResponse),
         });
 
       const result = await client.detectLanguage('こんにちは');
@@ -956,13 +964,13 @@ describe('PoeApiClient', () => {
           ok: false,
           status: 429,
           statusText: 'Too Many Requests',
-          text: async () => 'Rate limit',
+          text: () => Promise.resolve('Rate limit'),
           headers: { get: (name: string) => (name === 'Retry-After' ? '1' : null) },
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => successResponse,
+          json: () => Promise.resolve(successResponse),
         });
 
       const result = await client.detectLanguage('你好');
@@ -976,7 +984,7 @@ describe('PoeApiClient', () => {
         ok: false,
         status: 401,
         statusText: 'Unauthorized',
-        text: async () => 'Unauthorized',
+        text: () => Promise.resolve('Unauthorized'),
         headers: { get: () => null },
       });
 
