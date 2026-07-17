@@ -199,7 +199,7 @@ TARGET_CHANNELS=1234567890,0987654321
 # Poe API設定
 POE_API_KEY=your_poe_api_key_here
 POE_ENDPOINT_URL=https://api.poe.com/v1/chat/completions
-POE_MODEL_NAME=Claude-3.5-Sonnet
+POE_MODEL_NAME=gpt-5.4-nano
 
 # レート制限設定
 RATE_LIMIT_CONCURRENT=1
@@ -303,7 +303,7 @@ export const EnvSchema = z.object({
   TARGET_CHANNELS: z.string().optional(),
   POE_API_KEY: z.string().min(1, 'Poe API key is required'),
   POE_ENDPOINT_URL: z.string().url().default('https://api.poe.com/v1/chat/completions'),
-  POE_MODEL_NAME: z.string().default('Claude-3.5-Sonnet'),
+  POE_MODEL_NAME: z.string().default('gpt-5.4-nano'),
   RATE_LIMIT_CONCURRENT: z.string().default('1'),
   RATE_LIMIT_INTERVAL: z.string().default('1000'),
   LOG_LEVEL: z.string().default('info'),
