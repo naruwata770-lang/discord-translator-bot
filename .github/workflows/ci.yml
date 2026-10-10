@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint / Build / Test / Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 依存関係のインストール
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: ビルド
+        run: npm run build
+
+      - name: テスト（ユニット + 翻訳パイプライン結合テスト）
+        run: npm test -- --ci
+
+      - name: 起動スモークテスト
+        run: npm run test:smoke
