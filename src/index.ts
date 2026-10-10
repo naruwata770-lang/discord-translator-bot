@@ -37,7 +37,7 @@ process.on('unhandledRejection', (reason, promise) => {
   process.exit(1);
 });
 
-async function main() {
+async function main(): Promise<void> {
   try {
     logger.info('Starting Discord translation bot', {
       nodeVersion: process.version,
@@ -105,14 +105,23 @@ async function main() {
     await discordClient.start();
 
     // グレースフルシャットダウン
-    const shutdown = async (signal: string) => {
+    const shutdown = async (signal: string): Promise<void> => {
       logger.info(`Received ${signal}, shutting down gracefully`);
-      await discordClient.shutdown();
-      process.exit(0);
+      try {
+        await discordClient.shutdown();
+        process.exit(0);
+      } catch (error) {
+        logger.error('Failed to shut down gracefully', { error });
+        process.exit(1);
+      }
     };
 
-    process.on('SIGINT', () => shutdown('SIGINT'));
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => {
+      void shutdown('SIGINT');
+    });
+    process.on('SIGTERM', () => {
+      void shutdown('SIGTERM');
+    });
 
     logger.info('Discord translation bot started successfully');
   } catch (error) {
@@ -127,4 +136,4 @@ async function main() {
   }
 }
 
-main();
+void main();

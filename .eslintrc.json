@@ -23,5 +23,15 @@
     "@typescript-eslint/no-floating-promises": "error",
     "no-console": ["warn", { "allow": ["warn", "error"] }]
   },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/__tests__/**/*.ts"],
+      "plugins": ["jest"],
+      "rules": {
+        "@typescript-eslint/unbound-method": "off",
+        "jest/unbound-method": "error"
+      }
+    }
+  ],
   "ignorePatterns": ["dist", "node_modules", "coverage", "*.js"]
 }

@@ -1,16 +1,10 @@
 import { Message, ThreadChannel } from 'discord.js';
 import { CommandParser } from '../commands/commandParser';
 import { TranslationService } from '../services/translationService';
-import { MessageDispatcher } from './messageDispatcher';
+import { ChannelWithSend, MessageDispatcher } from './messageDispatcher';
 import { TranslationError } from '../utils/errors';
 import { ErrorCode } from '../types';
 import logger from '../utils/logger';
-
-// send()メソッドを持つチャンネルの型（messageDispatcherと同じ型）
-type ChannelWithSend = {
-  send(content: string): Promise<Message>;
-  send(options: { content: string; allowedMentions?: any }): Promise<Message>;
-};
 
 export class MessageHandler {
   private autoTranslateEnabled: Map<string, boolean> = new Map();
@@ -124,7 +118,7 @@ export class MessageHandler {
         logger.info('Auto-translate disabled', { channelId: message.channelId });
         break;
 
-      case 'auto_status':
+      case 'auto_status': {
         const isEnabled = this.isAutoTranslateEnabled(message.channelId);
         const status = isEnabled ? '✅ 自動翻訳 ON' : '⏸️ 自動翻訳 OFF';
         await this.dispatcher.sendCommandResponse(
@@ -132,6 +126,7 @@ export class MessageHandler {
           `現在の状態: ${status}`
         );
         break;
+      }
     }
   }
 
