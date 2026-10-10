@@ -3,7 +3,6 @@ import { CommandParser } from '../commands/commandParser';
 import { TranslationService } from '../services/translationService';
 import { MessageDispatcher } from './messageDispatcher';
 import { Message, TextChannel, Collection, Attachment, Embed, ThreadChannel } from 'discord.js';
-import { TranslationResult } from '../types';
 
 jest.mock('../commands/commandParser');
 jest.mock('../services/translationService');
@@ -40,7 +39,7 @@ describe('MessageHandler', () => {
       id: '123456789',
       send: jest.fn().mockResolvedValue(undefined),
       isThread: () => false, // 通常チャンネルはスレッドではない
-    } as any;
+    } as unknown as jest.Mocked<TextChannel>;
 
     mockMessage = {
       author: {
@@ -51,7 +50,7 @@ describe('MessageHandler', () => {
       content: 'こんにちは',
       attachments: new Collection<string, Attachment>(),
       embeds: [],
-    } as any;
+    } as unknown as jest.Mocked<Message>;
   });
 
   describe('基本的なフィルタリング', () => {
@@ -142,7 +141,7 @@ describe('MessageHandler', () => {
       mockCommandParser.parse.mockReturnValue({ type: 'auto_status' });
       await handler.handle(mockMessage);
 
-      const calls = (mockDispatcher.sendCommandResponse as jest.Mock).mock.calls;
+      const calls = mockDispatcher.sendCommandResponse.mock.calls;
       const lastCall = calls[calls.length - 1];
       expect(lastCall[1]).toBe('現在の状態: ⏸️ 自動翻訳 OFF');
     });
@@ -283,7 +282,7 @@ describe('MessageHandler', () => {
         parentId: '123456789', // 親チャンネルID（対象チャンネル）
         isThread: () => true,
         send: jest.fn().mockResolvedValue(undefined),
-      } as any;
+      } as unknown as jest.Mocked<ThreadChannel>;
     });
 
     it('対象チャンネルから派生したスレッド内のメッセージを翻訳する', async () => {
@@ -293,7 +292,7 @@ describe('MessageHandler', () => {
         channel: mockThread,
         channelId: '987654321', // スレッドID
         content: 'スレッドでこんにちは',
-      } as any;
+      } as unknown as Message;
 
       const multiTranslationResults = [
         {
@@ -333,7 +332,7 @@ describe('MessageHandler', () => {
         channel: externalThread,
         channelId: '987654321',
         content: 'このメッセージは翻訳されない',
-      } as any;
+      } as unknown as Message;
 
       await handler.handle(threadMessage);
 
@@ -346,7 +345,7 @@ describe('MessageHandler', () => {
         channel: mockThread,
         channelId: '987654321',
         content: '!auto off',
-      } as any;
+      } as unknown as Message;
       mockCommandParser.parse.mockReturnValue({ type: 'auto_off' });
 
       await handler.handle(threadMessage);
@@ -359,12 +358,12 @@ describe('MessageHandler', () => {
 
     it('スレッドごとに自動翻訳のON/OFF状態を個別管理する', async () => {
       // スレッドで自動翻訳をOFF
-      let threadMessage = {
+      let threadMessage: Message = {
         ...mockMessage,
         channel: mockThread,
         channelId: '987654321',
         content: '!auto off',
-      } as any;
+      } as unknown as Message;
       mockCommandParser.parse.mockReturnValue({ type: 'auto_off' });
       await handler.handle(threadMessage);
 
@@ -374,7 +373,7 @@ describe('MessageHandler', () => {
         channel: mockThread,
         channelId: '987654321',
         content: 'スレッドでこんにちは',
-      } as any;
+      } as unknown as Message;
       mockCommandParser.parse.mockReturnValue(null);
       await handler.handle(threadMessage);
 
@@ -386,7 +385,7 @@ describe('MessageHandler', () => {
         channel: mockChannel,
         channelId: '123456789',
         content: '親チャンネルでこんにちは',
-      } as any;
+      } as unknown as Message;
 
       mockTranslationService.multiTranslate.mockResolvedValue([
         {

@@ -2,12 +2,44 @@ import { MessageDispatcher } from './messageDispatcher';
 import { MultiTranslationResult } from '../types/multiTranslation';
 import { ErrorCode } from '../types';
 import { TranslationError } from '../utils/errors';
-import { Message, EmbedBuilder, TextChannel } from 'discord.js';
+import { Message, MessageMentionOptions } from 'discord.js';
+
+// reply()/send()に渡されるオプション
+type SendOptions = {
+  content: string;
+  embeds?: unknown;
+  allowedMentions?: MessageMentionOptions;
+};
+
+// テストで使うチャンネルのモック
+type MockChannel = {
+  send: jest.Mock<Promise<Message>, [string | SendOptions]>;
+};
+
+// テストで使うメッセージのモック（Messageのうち参照するプロパティのみ）
+type MockMessage = {
+  author: {
+    username: string;
+    displayAvatarURL: jest.Mock<string, []>;
+  };
+  createdAt: Date;
+  reply: jest.Mock<Promise<unknown>, [SendOptions]>;
+  content?: string;
+  cleanContent: string;
+  channel?: MockChannel;
+};
+
+/**
+ * モックをMessageとして渡す（必要なプロパティのみ実装しているため）
+ */
+function asMessage(mock: MockMessage): Message {
+  return mock as unknown as Message;
+}
 
 describe('MessageDispatcher', () => {
   let dispatcher: MessageDispatcher;
-  let mockMessage: jest.Mocked<Message>;
-  let mockChannel: jest.Mocked<TextChannel>;
+  let mockMessage: MockMessage;
+  let mockChannel: MockChannel;
 
   beforeEach(() => {
     dispatcher = new MessageDispatcher();
@@ -15,24 +47,24 @@ describe('MessageDispatcher', () => {
     // 返信メッセージのモック（react機能付き）
     const mockSentMessage = {
       id: 'sent-message-id',
-      react: jest.fn().mockResolvedValue(undefined),
+      react: jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined),
     };
 
     // モックメッセージ作成
     mockMessage = {
       author: {
         username: 'TestUser',
-        displayAvatarURL: jest.fn().mockReturnValue('https://avatar.url'),
+        displayAvatarURL: jest.fn<string, []>().mockReturnValue('https://avatar.url'),
       },
       createdAt: new Date('2025-10-17T12:00:00Z'),
-      reply: jest.fn().mockResolvedValue(mockSentMessage),
+      reply: jest.fn<Promise<unknown>, [SendOptions]>().mockResolvedValue(mockSentMessage),
       cleanContent: '',  // デフォルト値
-    } as any;
+    };
 
     // モックチャンネル作成
     mockChannel = {
-      send: jest.fn().mockResolvedValue(undefined),
-    } as any;
+      send: jest.fn<Promise<Message>, [string | SendOptions]>().mockResolvedValue({} as Message),
+    };
   });
 
   describe('sendMultiTranslation', () => {
@@ -46,10 +78,10 @@ describe('MessageDispatcher', () => {
         },
       ];
 
-      await dispatcher.sendMultiTranslation(results, mockMessage, 'こんにちは');
+      await dispatcher.sendMultiTranslation(results, asMessage(mockMessage), 'こんにちは');
 
       expect(mockMessage.reply).toHaveBeenCalledTimes(1);
-      const replyArgs = (mockMessage.reply as jest.Mock).mock.calls[0][0];
+      const replyArgs = mockMessage.reply.mock.calls[0][0];
 
       // Plain textメッセージが送信されることを確認
       expect(replyArgs.content).toBeDefined();
@@ -76,9 +108,9 @@ describe('MessageDispatcher', () => {
         },
       ];
 
-      await dispatcher.sendMultiTranslation(results, mockMessage, '你好');
+      await dispatcher.sendMultiTranslation(results, asMessage(mockMessage), '你好');
 
-      const replyArgs = (mockMessage.reply as jest.Mock).mock.calls[0][0];
+      const replyArgs = mockMessage.reply.mock.calls[0][0];
 
       // Plain textメッセージが送信されることを確認
       expect(replyArgs.content).toContain('💬 **原文**');
@@ -102,7 +134,7 @@ describe('MessageDispatcher', () => {
       mockMessage.reply.mockRejectedValue(sendError);
 
       await expect(
-        dispatcher.sendMultiTranslation(results, mockMessage, 'こんにちは')
+        dispatcher.sendMultiTranslation(results, asMessage(mockMessage), 'こんにちは')
       ).rejects.toThrow(sendError);
     });
   });
@@ -191,11 +223,11 @@ describe('MessageDispatcher', () => {
 
   describe('Plain textメッセージ機能', () => {
     it('メンションを含むメッセージではcleanContentを使用して再通知を防ぐ', async () => {
-      const mockMessageWithMention = {
+      const mockMessageWithMention: MockMessage = {
         ...mockMessage,
         content: 'こんにちは <@123456789>',
         cleanContent: 'こんにちは @UserName',
-      } as any;
+      };
 
       const results: MultiTranslationResult[] = [
         {
@@ -206,9 +238,9 @@ describe('MessageDispatcher', () => {
         },
       ];
 
-      await dispatcher.sendMultiTranslation(results, mockMessageWithMention, 'こんにちは <@123456789>');
+      await dispatcher.sendMultiTranslation(results, asMessage(mockMessageWithMention), 'こんにちは <@123456789>');
 
-      const replyArgs = (mockMessageWithMention.reply as jest.Mock).mock.calls[0][0];
+      const replyArgs = mockMessageWithMention.reply.mock.calls[0][0];
 
       // cleanContentが使用されていることを確認
       expect(replyArgs.content).toContain('こんにちは @UserName');
@@ -217,10 +249,10 @@ describe('MessageDispatcher', () => {
     });
 
     it('cleanContentが空の場合はoriginalTextにフォールバックする', async () => {
-      const mockMessageNoClean = {
+      const mockMessageNoClean: MockMessage = {
         ...mockMessage,
         cleanContent: '',
-      } as any;
+      };
 
       const results: MultiTranslationResult[] = [
         {
@@ -231,9 +263,9 @@ describe('MessageDispatcher', () => {
         },
       ];
 
-      await dispatcher.sendMultiTranslation(results, mockMessageNoClean, 'こんにちは');
+      await dispatcher.sendMultiTranslation(results, asMessage(mockMessageNoClean), 'こんにちは');
 
-      const replyArgs = (mockMessageNoClean.reply as jest.Mock).mock.calls[0][0];
+      const replyArgs = mockMessageNoClean.reply.mock.calls[0][0];
 
       // originalTextが使用されていることを確認
       expect(replyArgs.content).toContain('こんにちは');
@@ -241,11 +273,11 @@ describe('MessageDispatcher', () => {
 
     it('2000文字以下のメッセージは1つのメッセージで送信される', async () => {
       const shortText = 'こんにちは';
-      const mockMessageShort = {
+      const mockMessageShort: MockMessage = {
         ...mockMessage,
         cleanContent: shortText,
         channel: mockChannel,
-      } as any;
+      };
 
       const results: MultiTranslationResult[] = [
         {
@@ -262,7 +294,7 @@ describe('MessageDispatcher', () => {
         },
       ];
 
-      await dispatcher.sendMultiTranslation(results, mockMessageShort, shortText);
+      await dispatcher.sendMultiTranslation(results, asMessage(mockMessageShort), shortText);
 
       // 1つのreplyのみが呼ばれる
       expect(mockMessageShort.reply).toHaveBeenCalledTimes(1);
@@ -280,9 +312,9 @@ describe('MessageDispatcher', () => {
         },
       ];
 
-      await dispatcher.sendMultiTranslation(results, mockMessage, 'こんにちは');
+      await dispatcher.sendMultiTranslation(results, asMessage(mockMessage), 'こんにちは');
 
-      const replyArgs = (mockMessage.reply as jest.Mock).mock.calls[0][0];
+      const replyArgs = mockMessage.reply.mock.calls[0][0];
 
       // メンションがサニタイズされていることを確認
       expect(replyArgs.content).toContain('@user');
@@ -310,7 +342,7 @@ describe('MessageDispatcher', () => {
         },
       ];
 
-      await dispatcher.sendMultiTranslation(results, mockMessage, 'Hello');
+      await dispatcher.sendMultiTranslation(results, asMessage(mockMessage), 'Hello');
 
       // メッセージが送信されないことを確認
       expect(mockMessage.reply).not.toHaveBeenCalled();
@@ -334,7 +366,7 @@ describe('MessageDispatcher', () => {
         },
       ];
 
-      await dispatcher.sendMultiTranslation(results, mockMessage, 'こんにちは');
+      await dispatcher.sendMultiTranslation(results, asMessage(mockMessage), 'こんにちは');
 
       // メッセージが送信されることを確認
       expect(mockMessage.reply).toHaveBeenCalledTimes(1);
@@ -342,10 +374,10 @@ describe('MessageDispatcher', () => {
 
     it('全ての結果がINVALID_INPUT以外のエラーの場合はエラーメッセージを送信する', async () => {
       // channelプロパティを持つモックメッセージを作成
-      const mockMessageWithChannel = {
+      const mockMessageWithChannel: MockMessage = {
         ...mockMessage,
         channel: mockChannel,
-      } as any;
+      };
 
       const results = [
         {
@@ -364,7 +396,7 @@ describe('MessageDispatcher', () => {
         },
       ];
 
-      await dispatcher.sendMultiTranslation(results, mockMessageWithChannel, 'こんにちは');
+      await dispatcher.sendMultiTranslation(results, asMessage(mockMessageWithChannel), 'こんにちは');
 
       // エラーメッセージが送信されることを確認
       expect(mockChannel.send).toHaveBeenCalledWith(
