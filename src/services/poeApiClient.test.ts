@@ -32,7 +32,11 @@ describe('PoeApiClient', () => {
     jest.clearAllMocks();
 
     // sleep関数をモック化（即座に解決させる）
-    jest.spyOn(client as any, 'sleep').mockResolvedValue(undefined);
+    // sleepはprivateのため、テスト用に内部メソッドの型として参照する
+    type PoeApiClientInternals = { sleep(ms: number): Promise<void> };
+    jest
+      .spyOn(client as unknown as PoeApiClientInternals, 'sleep')
+      .mockResolvedValue(undefined);
   });
 
   describe('成功ケース', () => {
