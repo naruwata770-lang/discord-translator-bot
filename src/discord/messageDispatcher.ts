@@ -1,13 +1,16 @@
-import { Message } from 'discord.js';
+import { Message, MessageMentionOptions } from 'discord.js';
 import { TranslationError } from '../utils/errors';
 import { ErrorCode } from '../types';
 import { MultiTranslationResult } from '../types/multiTranslation';
 import logger from '../utils/logger';
 
 // send()メソッドを持つチャンネルの型
-type ChannelWithSend = {
+export type ChannelWithSend = {
   send(content: string): Promise<Message>;
-  send(options: { content: string; allowedMentions?: any }): Promise<Message>;
+  send(options: {
+    content: string;
+    allowedMentions?: MessageMentionOptions;
+  }): Promise<Message>;
 };
 
 export class MessageDispatcher {
@@ -159,6 +162,8 @@ export class MessageDispatcher {
     const cleanText = originalMessage.cleanContent || originalText;
     const sourceFlag = this.getLanguageFlag(sourceLang);
 
+    const channel = originalMessage.channel as ChannelWithSend;
+
     // 原文を送信
     const originalMsg = `💬 **原文**\n${cleanText}\n\n${sourceFlag} 自動翻訳`;
 
@@ -181,7 +186,7 @@ export class MessageDispatcher {
             allowedMentions: { parse: [], repliedUser: false },
           });
         } else {
-          await (originalMessage.channel as any).send(content);
+          await channel.send(content);
         }
       }
     }
@@ -196,7 +201,7 @@ export class MessageDispatcher {
         const translationMsg = `${flag} **${langName}**\n${sanitizedText}`;
 
         if (translationMsg.length <= 2000) {
-          await (originalMessage.channel as any).send(translationMsg);
+          await channel.send(translationMsg);
         } else {
           // 翻訳結果が2000文字超過
           const chunks = this.splitText(sanitizedText, 1900);
@@ -204,14 +209,14 @@ export class MessageDispatcher {
             const content = i === 0
               ? `${flag} **${langName}**\n${chunks[i]}`
               : `${flag} **${langName}（続き）**\n${chunks[i]}`;
-            await (originalMessage.channel as any).send(content);
+            await channel.send(content);
           }
         }
       } else {
         // エラーの場合
         const flag = this.getLanguageFlag(result.targetLang);
         const langName = this.getLanguageName(result.targetLang);
-        await (originalMessage.channel as any).send(`${flag} **${langName}**\n⚠️ 翻訳に失敗しました`);
+        await channel.send(`${flag} **${langName}**\n⚠️ 翻訳に失敗しました`);
       }
     }
   }

@@ -15,7 +15,7 @@ describe('RateLimiter', () => {
       let activeCount = 0;
       let maxActiveCount = 0;
 
-      const task = async () => {
+      const task = async (): Promise<void> => {
         await limiter.acquire();
         activeCount++;
         maxActiveCount = Math.max(maxActiveCount, activeCount);
@@ -27,8 +27,10 @@ describe('RateLimiter', () => {
         }, 50);
       };
 
-      // 5つのタスクを同時実行
-      const promises = [task(), task(), task(), task(), task()];
+      // 5つのタスクを同時実行（完了は待たず、同時実行数のみ検証する）
+      for (let i = 0; i < 5; i++) {
+        void task();
+      }
 
       // タイマーを進める
       jest.advanceTimersByTime(50);
@@ -135,7 +137,7 @@ describe('RateLimiter', () => {
       const limiter = new RateLimiter(1, 50);
       const executionOrder: number[] = [];
 
-      const task = async (id: number) => {
+      const task = async (id: number): Promise<void> => {
         await limiter.acquire();
         executionOrder.push(id);
         limiter.release();

@@ -49,50 +49,22 @@ export class DiscordClient {
     });
 
     // messageCreateイベント
-    this.client.on(Events.MessageCreate, async (message: Message) => {
-      try {
-        await this.messageHandler.handle(message);
-      } catch (error) {
-        logger.error('Error handling message', {
-          messageId: message.id,
-          channelId: message.channelId,
-          content: message.content.substring(0, 50), // 最初の50文字のみ
-          error: error instanceof Error ? {
-            name: error.name,
-            message: error.message,
-            stack: error.stack,
-          } : error,
-        });
-      }
+    // discord.js のリスナーは戻り値の Promise を扱わないため、
+    // 例外処理を内包した async メソッドを void で呼び出す
+    this.client.on(Events.MessageCreate, (message: Message) => {
+      void this.onMessageCreate(message);
     });
 
     // messageReactionAddイベント（リトライ機能）
-    if (this.reactionHandler) {
+    const reactionHandler = this.reactionHandler;
+    if (reactionHandler) {
       this.client.on(
         Events.MessageReactionAdd,
-        async (
+        (
           reaction: MessageReaction | PartialMessageReaction,
           user: User | PartialUser
         ) => {
-          try {
-            await this.reactionHandler!.handle(
-              reaction as MessageReaction,
-              user as User
-            );
-          } catch (error) {
-            logger.error('Error handling reaction', {
-              messageId: reaction.message.id,
-              emoji: reaction.emoji.name,
-              error:
-                error instanceof Error
-                  ? {
-                      name: error.name,
-                      message: error.message,
-                      stack: error.stack,
-                    }
-                  : error,
-            });
-          }
+          void this.onMessageReactionAdd(reactionHandler, reaction, user);
         }
       );
     }
@@ -122,6 +94,49 @@ export class DiscordClient {
         } : error,
       });
       throw error;
+    }
+  }
+
+  private async onMessageCreate(message: Message): Promise<void> {
+    try {
+      await this.messageHandler.handle(message);
+    } catch (error) {
+      logger.error('Error handling message', {
+        messageId: message.id,
+        channelId: message.channelId,
+        content: message.content.substring(0, 50), // 最初の50文字のみ
+        error: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        } : error,
+      });
+    }
+  }
+
+  private async onMessageReactionAdd(
+    reactionHandler: ReactionHandler,
+    reaction: MessageReaction | PartialMessageReaction,
+    user: User | PartialUser
+  ): Promise<void> {
+    try {
+      await reactionHandler.handle(
+        reaction as MessageReaction,
+        user as User
+      );
+    } catch (error) {
+      logger.error('Error handling reaction', {
+        messageId: reaction.message.id,
+        emoji: reaction.emoji.name,
+        error:
+          error instanceof Error
+            ? {
+                name: error.name,
+                message: error.message,
+                stack: error.stack,
+              }
+            : error,
+      });
     }
   }
 
