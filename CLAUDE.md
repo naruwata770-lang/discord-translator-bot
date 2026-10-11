@@ -80,7 +80,7 @@ MCPツールとして、Claude Code内から直接呼び出し可能です。
 - `config`パラメータで`model`を指定すると応答が返ってこない
 
 ### Claude Code Action (GitHub統合)
-GitHub Issueから自動実装、PRレビューまでを自動化します。
+GitHub IssueからのPR自動作成までを自動化します。（PR自動レビューは廃止済み）
 
 #### Issue自動実装について
 Issueに`claude-implement`ラベルを付けると:
@@ -105,16 +105,8 @@ Issueに`claude-implement`ラベルを付けると:
 - `.github/workflows/`の変更（ワークフロー自己改変の禁止）
 - `package.json`の依存関係変更（セキュリティリスク）
 
-#### PR自動レビューについて
-PRを作成すると:
-- GitHub Actionsで別のClaude Codeが起動
-- 本プロジェクトの品質基準（CLAUDE.md）に基づいてレビュー
-- TypeScript型安全性、エラーハンドリング、セキュリティなどをチェック
-- コメントで指摘・改善提案を受け取る
-
 #### ワークフロー
 - `.github/workflows/claude-auto-implement.yml`: Issue自動実装
-- `.github/workflows/claude-auto-review.yml`: PR自動レビュー
 - 詳細: [docs/CLAUDE_CODE_ACTION_GUIDE.md](/docs/CLAUDE_CODE_ACTION_GUIDE.md)
 
 #### レビュープロセス

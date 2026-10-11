@@ -1,12 +1,13 @@
 import { DiscordClient } from './discordClient';
 import { MessageHandler } from './messageHandler';
 import { Client, Events, Message, GatewayIntentBits, Partials } from 'discord.js';
+import logger from '../utils/logger';
 
 jest.mock('./messageHandler');
 
 // GatewayIntentBitsとPartialsをモック
 jest.mock('discord.js', () => ({
-  ...jest.requireActual('discord.js'),
+  ...jest.requireActual<typeof import('discord.js')>('discord.js'),
   Client: jest.fn(),
   GatewayIntentBits: {
     Guilds: 1,
@@ -29,32 +30,59 @@ jest.mock('discord.js', () => ({
   },
 }));
 
+type Listener = (...args: unknown[]) => unknown;
+
+// テストで使うClientのメソッドだけを持つモック
+type MockClient = {
+  login: jest.Mock<Promise<string>, [string]>;
+  on: jest.Mock<void, [string, Listener]>;
+  once: jest.Mock<void, [string, Listener]>;
+  destroy: jest.Mock<Promise<void>, []>;
+};
+
+/**
+ * on/onceで登録されたイベントリスナーを取得する
+ */
+function findListener(
+  register: jest.Mock<void, [string, Listener]>,
+  event: string
+): Listener | undefined {
+  return register.mock.calls.find(([name]) => name === event)?.[1];
+}
+
+/**
+ * 保留中のPromiseをすべて解決させる
+ */
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 describe('DiscordClient', () => {
   let discordClient: DiscordClient;
-  let mockMessageHandler: jest.Mocked<MessageHandler>;
-  let mockClient: jest.Mocked<Client>;
+  let mockMessageHandler: jest.Mocked<Pick<MessageHandler, 'handle'>>;
+  let mockClient: MockClient;
   const mockToken = 'test-token';
 
   beforeEach(() => {
     mockMessageHandler = {
-      handle: jest.fn().mockResolvedValue(undefined),
-    } as any;
+      handle: jest.fn<Promise<void>, [Message]>().mockResolvedValue(undefined),
+    };
 
     // discord.jsのClientをモック
     mockClient = {
-      login: jest.fn().mockResolvedValue('token'),
-      on: jest.fn(),
-      once: jest.fn(),
-      destroy: jest.fn().mockResolvedValue(undefined),
-      user: {
-        tag: 'TestBot#1234',
-      },
-    } as any;
+      login: jest.fn<Promise<string>, [string]>().mockResolvedValue('token'),
+      on: jest.fn<void, [string, Listener]>(),
+      once: jest.fn<void, [string, Listener]>(),
+      destroy: jest.fn<Promise<void>, []>().mockResolvedValue(undefined),
+    };
 
     // Clientコンストラクタをモック
-    (Client as jest.MockedClass<typeof Client>).mockImplementation(() => mockClient);
+    jest.mocked(Client).mockImplementation(() => mockClient as unknown as Client);
 
-    discordClient = new DiscordClient(mockToken, mockMessageHandler);
+    discordClient = new DiscordClient(
+      mockToken,
+      mockMessageHandler as unknown as MessageHandler
+    );
   });
 
   describe('constructor', () => {
@@ -101,9 +129,7 @@ describe('DiscordClient', () => {
       await discordClient.start();
 
       // readyイベントのコールバックを取得して実行
-      const readyCallback = (mockClient.once as jest.Mock).mock.calls.find(
-        (call) => call[0] === Events.ClientReady
-      )?.[1];
+      const readyCallback = findListener(mockClient.once, Events.ClientReady);
 
       expect(readyCallback).toBeDefined();
       if (readyCallback) {
@@ -129,13 +155,12 @@ describe('DiscordClient', () => {
       await discordClient.start();
 
       // messageCreateイベントのコールバックを取得して実行
-      const messageCallback = (mockClient.on as jest.Mock).mock.calls.find(
-        (call) => call[0] === Events.MessageCreate
-      )?.[1];
+      const messageCallback = findListener(mockClient.on, Events.MessageCreate);
 
       expect(messageCallback).toBeDefined();
       if (messageCallback) {
-        await messageCallback(mockMessage);
+        messageCallback(mockMessage);
+        await flushPromises();
         expect(mockMessageHandler.handle).toHaveBeenCalledWith(mockMessage);
       }
     });
@@ -161,18 +186,22 @@ describe('DiscordClient', () => {
       const mockMessage = { content: 'test message' } as Message;
       const handlerError = new Error('Handler failed');
       mockMessageHandler.handle.mockRejectedValue(handlerError);
+      const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => undefined);
 
       await discordClient.start();
 
       // messageCreateイベントのコールバックを取得して実行
-      const messageCallback = (mockClient.on as jest.Mock).mock.calls.find(
-        (call) => call[0] === Events.MessageCreate
-      )?.[1];
+      const messageCallback = findListener(mockClient.on, Events.MessageCreate);
 
+      expect(messageCallback).toBeDefined();
       if (messageCallback) {
-        // エラーが発生してもクラッシュしないことを確認
-        await expect(messageCallback(mockMessage)).resolves.not.toThrow();
+        // エラーが発生してもクラッシュせず、ログに記録されることを確認
+        expect(() => messageCallback(mockMessage)).not.toThrow();
+        await flushPromises();
+        expect(errorSpy).toHaveBeenCalledTimes(1);
+        expect(errorSpy.mock.calls[0]?.[0]).toBe('Error handling message');
       }
+      errorSpy.mockRestore();
     });
   });
 });

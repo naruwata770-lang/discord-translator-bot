@@ -2,11 +2,17 @@ import * as fs from 'fs';
 import * as yaml from 'js-yaml';
 import {
   Dictionary,
-  DictionaryEntry,
   DictionaryMatch,
   LanguageCode,
 } from '../types/dictionary';
 import logger from '../utils/logger';
+
+/**
+ * 値が（nullでない）オブジェクトかどうかを判定する型ガード
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
 
 export class DictionaryService {
   private dictionary: Dictionary | null = null;
@@ -23,12 +29,12 @@ export class DictionaryService {
       const fileContents = fs.readFileSync(filePath, 'utf8');
 
       // YAMLパース
-      const data = yaml.load(fileContents) as any;
+      const data: unknown = yaml.load(fileContents);
 
-      // バリデーション
+      // バリデーション（成功すれば data は Dictionary として扱える）
       this.validateDictionary(data);
 
-      this.dictionary = data as Dictionary;
+      this.dictionary = data;
       logger.info('Dictionary loaded successfully', {
         name: this.dictionary.name,
         version: this.dictionary.version,
@@ -47,9 +53,9 @@ export class DictionaryService {
    * @param data パースされたYAMLデータ
    * @throws バリデーションエラー
    */
-  private validateDictionary(data: any): void {
+  private validateDictionary(data: unknown): asserts data is Dictionary {
     // トップレベルの型チェック
-    if (!data || typeof data !== 'object') {
+    if (!isRecord(data)) {
       throw new Error(
         'Dictionary validation failed: YAML must contain a valid object'
       );
@@ -62,7 +68,7 @@ export class DictionaryService {
     if (!data.version) {
       throw new Error('Dictionary validation failed: "version" is required');
     }
-    if (!data.entries || !Array.isArray(data.entries)) {
+    if (!Array.isArray(data.entries)) {
       throw new Error(
         'Dictionary validation failed: "entries" must be an array'
       );
@@ -72,28 +78,27 @@ export class DictionaryService {
     const ids = new Set<string>();
     const validLanguages: LanguageCode[] = ['ja', 'zh', 'en'];
 
-    for (const entry of data.entries) {
-      if (!entry.id) {
+    for (const entry of data.entries as unknown[]) {
+      if (!isRecord(entry) || typeof entry.id !== 'string' || !entry.id) {
         throw new Error(
           'Dictionary validation failed: all entries must have an "id"'
         );
       }
-      if (ids.has(entry.id)) {
-        throw new Error(
-          `Dictionary validation failed: duplicate id "${entry.id}"`
-        );
+      const id = entry.id;
+      if (ids.has(id)) {
+        throw new Error(`Dictionary validation failed: duplicate id "${id}"`);
       }
-      ids.add(entry.id);
+      ids.add(id);
 
       // aliasesとtargetsの存在チェック
-      if (!entry.aliases) {
+      if (!isRecord(entry.aliases)) {
         throw new Error(
-          `Dictionary validation failed: entry "${entry.id}" must have "aliases"`
+          `Dictionary validation failed: entry "${id}" must have "aliases"`
         );
       }
-      if (!entry.targets) {
+      if (!isRecord(entry.targets)) {
         throw new Error(
-          `Dictionary validation failed: entry "${entry.id}" must have "targets"`
+          `Dictionary validation failed: entry "${id}" must have "targets"`
         );
       }
 
@@ -104,15 +109,15 @@ export class DictionaryService {
           // 配列型チェック
           if (!Array.isArray(aliases)) {
             throw new Error(
-              `Dictionary validation failed: entry "${entry.id}" aliases.${lang} must be an array`
+              `Dictionary validation failed: entry "${id}" aliases.${lang} must be an array`
             );
           }
 
           // 各エイリアスが非空文字列かチェック
-          for (const alias of aliases) {
+          for (const alias of aliases as unknown[]) {
             if (typeof alias !== 'string' || alias.trim() === '') {
               throw new Error(
-                `Dictionary validation failed: entry "${entry.id}" has empty or invalid alias in ${lang}`
+                `Dictionary validation failed: entry "${id}" has empty or invalid alias in ${lang}`
               );
             }
           }
@@ -126,7 +131,7 @@ export class DictionaryService {
           // 文字列型チェック
           if (typeof target !== 'string' || target.trim() === '') {
             throw new Error(
-              `Dictionary validation failed: entry "${entry.id}" has empty or invalid target in ${lang}`
+              `Dictionary validation failed: entry "${id}" has empty or invalid target in ${lang}`
             );
           }
         }
