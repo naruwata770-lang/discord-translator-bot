@@ -32,7 +32,7 @@ TARGET_CHANNELS=<channel_id_1>,<channel_id_2>
 # Poe API設定
 POE_API_KEY=<your_poe_api_key>
 POE_ENDPOINT_URL=https://api.poe.com/v1/chat/completions
-POE_MODEL_NAME=gpt-5.4-nano
+POE_MODEL_NAME=gpt-5.4-mini
 
 # レート制限設定
 RATE_LIMIT_CONCURRENT=1
@@ -306,7 +306,7 @@ Railway.appはプロセスがクラッシュした場合、自動的に再起動
 | `TARGET_CHANNELS` | ✅ | - | 対象チャンネルID（カンマ区切り） |
 | `POE_API_KEY` | ✅ | - | Poe APIキー |
 | `POE_ENDPOINT_URL` | ⚠️ | https://api.poe.com/v1/chat/completions | Poe APIのエンドポイントURL |
-| `POE_MODEL_NAME` | ⚠️ | gpt-5.4-nano | 使用するモデル名 |
+| `POE_MODEL_NAME` | ⚠️ | gpt-5.4-mini | 使用するモデル名 |
 | `RATE_LIMIT_CONCURRENT` | ⚠️ | 1 | 最大同時実行数 |
 | `RATE_LIMIT_INTERVAL` | ⚠️ | 1000 | リクエスト間隔（ミリ秒） |
 | `LOG_LEVEL` | ⚠️ | info | ログレベル |
