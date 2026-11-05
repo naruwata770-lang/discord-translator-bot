@@ -1,12 +1,12 @@
 # Discord自動翻訳bot
 
 Discordで中国人の友達と日本語⇔中国語で楽しくチャットするための自動翻訳bot。
-Poe APIを使用してAI経由で高品質な翻訳を提供します。
+Vercel AI Gateway（OpenAI互換API）経由でLLMを使い、高品質な翻訳を提供します。
 
 ## 特徴
 
 - 🌏 **2言語同時翻訳**（日本語→中国語+英語、中国語→日本語+英語）
-- 🤖 **AI翻訳エンジン**（Poe API経由）
+- 🤖 **AI翻訳エンジン**（Vercel AI Gateway経由）
 - ⚡ **自動翻訳モード**（全メッセージを自動翻訳）
 - 💬 **Embed形式**で見やすい翻訳結果
 - 🔄 **自動言語検出**（AI検出 + ルールベース）
@@ -70,7 +70,7 @@ Poe APIを使用してAI経由で高品質な翻訳を提供します。
 
 - **言語**: TypeScript + Node.js 20+
 - **Discord API**: discord.js v14
-- **翻訳API**: Poe API（OpenAI互換）
+- **翻訳API**: Vercel AI Gateway（OpenAI互換）
 - **設定管理**: zod（型安全なバリデーション）
 - **ロガー**: pino（構造化ログ）
 - **デプロイ**: Railway.app（自動デプロイ）
@@ -83,7 +83,7 @@ Poe APIを使用してAI経由で高品質な翻訳を提供します。
 
 - Node.js 20.x以上
 - Discord Bot Token
-- Poe API Key
+- Vercel AI Gateway API Key
 
 ### インストール
 
@@ -113,6 +113,16 @@ npm run build
 npm start
 ```
 
+### AI Gatewayの実接続確認
+
+`.env`（または環境変数）に `AI_GATEWAY_API_KEY` を入れた状態で実行すると、
+モデル一覧に `AI_MODEL_NAME` があるかと、日本語⇔中国語の1往復翻訳が通るかを確認します（実APIを呼ぶので少額課金されます）。
+
+```bash
+npm run build
+npm run verify:gateway
+```
+
 ---
 
 ## 環境変数
@@ -124,10 +134,11 @@ npm start
 DISCORD_BOT_TOKEN=your_discord_bot_token_here
 TARGET_CHANNELS=1234567890,0987654321
 
-# Poe API設定
-POE_API_KEY=your_poe_api_key_here
-POE_ENDPOINT_URL=https://api.poe.com/v1/chat/completions
-POE_MODEL_NAME=gpt-5.4-mini
+# Vercel AI Gateway設定（OpenAI互換API）
+AI_GATEWAY_API_KEY=your_ai_gateway_api_key_here
+AI_GATEWAY_BASE_URL=https://ai-gateway.vercel.sh/v1
+# モデル名は「提供元/モデル」の形式。一覧は GET https://ai-gateway.vercel.sh/v1/models
+AI_MODEL_NAME=openai/gpt-5.4-mini
 
 # レート制限設定
 RATE_LIMIT_CONCURRENT=1
@@ -197,7 +208,7 @@ discord-translator-bot/
 - [x] DictionaryService（辞書機能）- 21テスト
 - [x] Logger（pino構造化ログ）
 - [x] ConfigStore（zod環境変数管理）
-- [x] PoeApiClient（Poe API通信）- 10テスト
+- [x] AiGatewayClient（Vercel AI Gateway通信）- 10テスト
 - [x] TranslationService（翻訳ロジック）- 12テスト
 - [x] MessageDispatcher（Embed送信）- 10テスト
 - [x] MessageHandler（自動翻訳ハンドラ）- 17テスト
@@ -264,7 +275,7 @@ MIT
 ## 参考
 
 - [Discord.js公式ドキュメント](https://discord.js.org/)
-- [Poe API公式ドキュメント](https://developer.poe.com/)
+- [Vercel AI Gateway公式ドキュメント](https://vercel.com/docs/ai-gateway)
 - [Railway.app公式ドキュメント](https://docs.railway.app/)
 
 ---

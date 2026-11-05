@@ -2,7 +2,7 @@ import { TranslationError } from '../utils/errors';
 import { ErrorCode } from '../types';
 import logger from '../utils/logger';
 
-interface PoeApiResponse {
+interface ChatCompletionResponse {
   choices: Array<{
     message: {
       content: string;
@@ -10,15 +10,22 @@ interface PoeApiResponse {
   }>;
 }
 
-export class PoeApiClient {
+/**
+ * Vercel AI Gateway（OpenAI互換API）クライアント
+ * baseUrl（例: https://ai-gateway.vercel.sh/v1）に /chat/completions を付けて呼び出す
+ */
+export class AiGatewayClient {
   private readonly maxRetries = 3;
   private readonly baseDelay = 1000; // 1秒
+  private readonly endpointUrl: string;
 
   constructor(
     private apiKey: string,
-    private endpointUrl: string,
+    baseUrl: string,
     private modelName: string
-  ) {}
+  ) {
+    this.endpointUrl = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  }
 
   async translate(
     text: string,
@@ -189,7 +196,7 @@ Examples of correct translation:
     return prompt;
   }
 
-  private async callApi(prompt: string): Promise<PoeApiResponse> {
+  private async callApi(prompt: string): Promise<ChatCompletionResponse> {
     try {
       const response = await fetch(this.endpointUrl, {
         method: 'POST',
@@ -227,7 +234,7 @@ Examples of correct translation:
         }
 
         const error = new TranslationError(
-          `Poe API Error: ${statusCode} ${response.statusText} - ${errorText}`,
+          `AI Gateway API Error: ${statusCode} ${response.statusText} - ${errorText}`,
           errorCode
         );
 
@@ -240,7 +247,7 @@ Examples of correct translation:
         throw error;
       }
 
-      return (await response.json()) as PoeApiResponse;
+      return (await response.json()) as ChatCompletionResponse;
     } catch (error) {
       // すでにTranslationErrorの場合はそのまま再スロー
       if (error instanceof TranslationError) {
@@ -260,7 +267,7 @@ Examples of correct translation:
    * APIレスポンスから生のコンテンツを抽出（検証なし）
    * detectLanguageで使用
    */
-  private extractRawContent(response: PoeApiResponse): string {
+  private extractRawContent(response: ChatCompletionResponse): string {
     if (
       !response.choices ||
       !response.choices[0] ||
@@ -281,7 +288,7 @@ Examples of correct translation:
    * translateで使用
    */
   private extractTranslation(
-    response: PoeApiResponse,
+    response: ChatCompletionResponse,
     originalText: string,
     sourceLang: string,
     targetLang: string
@@ -455,7 +462,7 @@ ${text}
           { role: 'user', content: userPrompt },
         ],
         temperature: 0,
-        // Poe OpenAI互換APIのgpt-5.4系はmax_tokens最小値16を要求するため余裕を持たせる
+        // gpt-5.4系はmax_tokens最小値16を要求するため余裕を持たせる
         max_tokens: 100,
       }),
     });
@@ -489,7 +496,7 @@ ${text}
       throw error;
     }
 
-    const data = (await response.json()) as PoeApiResponse;
+    const data = (await response.json()) as ChatCompletionResponse;
     const rawContent = this.extractRawContent(data);
 
     logger.debug('Language detection result', {

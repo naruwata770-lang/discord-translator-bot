@@ -1,5 +1,5 @@
 import { TranslationService } from './translationService';
-import { PoeApiClient } from './poeApiClient';
+import { AiGatewayClient } from './aiGatewayClient';
 import { LanguageDetector } from './languageDetector';
 import { RateLimiter } from './rateLimiter';
 import { DictionaryService } from './dictionaryService';
@@ -9,25 +9,25 @@ import { ErrorCode } from '../types';
 import { MultiTranslateTarget } from '../types/multiTranslation';
 
 // モック設定
-jest.mock('./poeApiClient');
+jest.mock('./aiGatewayClient');
 jest.mock('./languageDetector');
 jest.mock('./rateLimiter');
 jest.mock('./dictionaryService');
 
 describe('TranslationService - multiTranslate', () => {
   let service: TranslationService;
-  let mockPoeClient: jest.Mocked<PoeApiClient>;
+  let mockLlmClient: jest.Mocked<AiGatewayClient>;
   let mockLanguageDetector: jest.Mocked<LanguageDetector>;
   let mockRateLimiter: jest.Mocked<RateLimiter>;
   let mockDictionaryService: jest.Mocked<DictionaryService>;
 
   beforeEach(() => {
     // モックインスタンス作成
-    mockPoeClient = new PoeApiClient(
+    mockLlmClient = new AiGatewayClient(
       'mock-key',
       'mock-url',
       'mock-model'
-    ) as jest.Mocked<PoeApiClient>;
+    ) as jest.Mocked<AiGatewayClient>;
     mockLanguageDetector = new LanguageDetector() as jest.Mocked<LanguageDetector>;
     mockRateLimiter = new RateLimiter(1, 1000) as jest.Mocked<RateLimiter>;
     mockDictionaryService = new DictionaryService() as jest.Mocked<DictionaryService>;
@@ -38,7 +38,7 @@ describe('TranslationService - multiTranslate', () => {
     mockDictionaryService.findMatches.mockReturnValue([]);
 
     service = new TranslationService(
-      mockPoeClient,
+      mockLlmClient,
       mockLanguageDetector,
       mockRateLimiter,
       false,
@@ -60,7 +60,7 @@ describe('TranslationService - multiTranslate', () => {
 
       // モック設定
       mockLanguageDetector.detect.mockReturnValue('ja');
-      mockPoeClient.translate
+      mockLlmClient.translate
         .mockResolvedValueOnce('你好') // 中国語
         .mockResolvedValueOnce('Hello'); // 英語
 
@@ -87,7 +87,7 @@ describe('TranslationService - multiTranslate', () => {
       });
 
       // translate()が2回呼ばれていることを確認
-      expect(mockPoeClient.translate).toHaveBeenCalledTimes(2);
+      expect(mockLlmClient.translate).toHaveBeenCalledTimes(2);
     });
 
     it('中国語→日本語+英語の2言語同時翻訳が成功する（targets指定あり）', async () => {
@@ -98,7 +98,7 @@ describe('TranslationService - multiTranslate', () => {
       ];
 
       mockLanguageDetector.detect.mockReturnValue('zh');
-      mockPoeClient.translate
+      mockLlmClient.translate
         .mockResolvedValueOnce('こんにちは')
         .mockResolvedValueOnce('Hello');
 
@@ -121,7 +121,7 @@ describe('TranslationService - multiTranslate', () => {
       const text = 'こんにちは';
 
       mockLanguageDetector.detect.mockReturnValue('ja');
-      mockPoeClient.translate
+      mockLlmClient.translate
         .mockResolvedValueOnce('你好')
         .mockResolvedValueOnce('Hello');
 
@@ -146,7 +146,7 @@ describe('TranslationService - multiTranslate', () => {
       const text = '你好';
 
       mockLanguageDetector.detect.mockReturnValue('zh');
-      mockPoeClient.translate
+      mockLlmClient.translate
         .mockResolvedValueOnce('こんにちは')
         .mockResolvedValueOnce('Hello');
 
@@ -186,7 +186,7 @@ describe('TranslationService - multiTranslate', () => {
           targetLanguage: 'zh',
         },
       ]);
-      mockPoeClient.translate.mockResolvedValue('卡拉彼丘是一个有趣的游戏');
+      mockLlmClient.translate.mockResolvedValue('卡拉彼丘是一个有趣的游戏');
 
       const results = await service.multiTranslate(text, targets);
 
@@ -234,7 +234,7 @@ describe('TranslationService - multiTranslate', () => {
       ];
 
       mockLanguageDetector.detect.mockReturnValue('ja');
-      mockPoeClient.translate
+      mockLlmClient.translate
         .mockResolvedValueOnce('你好') // 中国語成功
         .mockRejectedValueOnce(
           new TranslationError('API timeout', ErrorCode.API_ERROR)
@@ -270,7 +270,7 @@ describe('TranslationService - multiTranslate', () => {
       ];
 
       mockLanguageDetector.detect.mockReturnValue('ja');
-      mockPoeClient.translate.mockRejectedValue(
+      mockLlmClient.translate.mockRejectedValue(
         new TranslationError('API service unavailable', ErrorCode.API_ERROR)
       );
 
@@ -309,7 +309,7 @@ describe('TranslationService - multiTranslate', () => {
         resolveEn = resolve;
       });
 
-      mockPoeClient.translate
+      mockLlmClient.translate
         .mockReturnValueOnce(zhPromise)
         .mockReturnValueOnce(enPromise);
 
@@ -318,7 +318,7 @@ describe('TranslationService - multiTranslate', () => {
       // 両方のtranslate()が呼ばれる前に解決される
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      expect(mockPoeClient.translate).toHaveBeenCalledTimes(2);
+      expect(mockLlmClient.translate).toHaveBeenCalledTimes(2);
 
       // 並列実行なので両方解決する
       resolveZh!('你好');
@@ -335,7 +335,7 @@ describe('TranslationService - multiTranslate', () => {
   describe('辞書サービスなしの場合', () => {
     it('辞書サービスがない場合でも正常動作する', async () => {
       const serviceWithoutDict = new TranslationService(
-        mockPoeClient,
+        mockLlmClient,
         mockLanguageDetector,
         mockRateLimiter,
         false
@@ -346,7 +346,7 @@ describe('TranslationService - multiTranslate', () => {
       const targets: MultiTranslateTarget[] = [{ lang: 'zh' }];
 
       mockLanguageDetector.detect.mockReturnValue('ja');
-      mockPoeClient.translate.mockResolvedValue('你好');
+      mockLlmClient.translate.mockResolvedValue('你好');
 
       const results = await serviceWithoutDict.multiTranslate(text, targets);
 
@@ -363,17 +363,17 @@ describe('TranslationService - multiTranslate', () => {
 
 describe('TranslationService - AI言語検出モード（3ステップフロー）', () => {
   let service: TranslationService;
-  let mockPoeClient: jest.Mocked<PoeApiClient>;
+  let mockLlmClient: jest.Mocked<AiGatewayClient>;
   let mockLanguageDetector: jest.Mocked<LanguageDetector>;
   let mockRateLimiter: jest.Mocked<RateLimiter>;
   let mockDictionaryService: jest.Mocked<DictionaryService>;
 
   beforeEach(() => {
-    mockPoeClient = new PoeApiClient(
+    mockLlmClient = new AiGatewayClient(
       'mock-key',
       'mock-url',
       'mock-model'
-    ) as jest.Mocked<PoeApiClient>;
+    ) as jest.Mocked<AiGatewayClient>;
     mockLanguageDetector = new LanguageDetector() as jest.Mocked<LanguageDetector>;
     mockRateLimiter = new RateLimiter(1, 1000) as jest.Mocked<RateLimiter>;
     mockDictionaryService = new DictionaryService() as jest.Mocked<DictionaryService>;
@@ -385,7 +385,7 @@ describe('TranslationService - AI言語検出モード（3ステップフロー�
 
     // AI検出モードを有効化
     service = new TranslationService(
-      mockPoeClient,
+      mockLlmClient,
       mockLanguageDetector,
       mockRateLimiter,
       true, // useAiDetection = true
@@ -402,9 +402,9 @@ describe('TranslationService - AI言語検出モード（3ステップフロー�
       const text = 'こんにちは';
 
       // Step 1: detectLanguage()が'ja'を返す
-      mockPoeClient.detectLanguage.mockResolvedValue('ja');
+      mockLlmClient.detectLanguage.mockResolvedValue('ja');
       // Step 2-3: translate()が中国語と英語の翻訳を返す
-      mockPoeClient.translate
+      mockLlmClient.translate
         .mockResolvedValueOnce('你好')
         .mockResolvedValueOnce('Hello');
 
@@ -429,15 +429,15 @@ describe('TranslationService - AI言語検出モード（3ステップフロー�
       });
 
       // detectLanguage()は1回、translate()は2回呼ばれる
-      expect(mockPoeClient.detectLanguage).toHaveBeenCalledTimes(1);
-      expect(mockPoeClient.translate).toHaveBeenCalledTimes(2);
+      expect(mockLlmClient.detectLanguage).toHaveBeenCalledTimes(1);
+      expect(mockLlmClient.translate).toHaveBeenCalledTimes(2);
     });
 
     it('中国語を検出して日本語+英語に翻訳する', async () => {
       const text = '你好';
 
-      mockPoeClient.detectLanguage.mockResolvedValue('zh');
-      mockPoeClient.translate
+      mockLlmClient.detectLanguage.mockResolvedValue('zh');
+      mockLlmClient.translate
         .mockResolvedValueOnce('こんにちは')
         .mockResolvedValueOnce('Hello');
 
@@ -466,8 +466,8 @@ describe('TranslationService - AI言語検出モード（3ステップフロー�
       const text = 'こんにちは';
       const targets: MultiTranslateTarget[] = [{ lang: 'zh' }];
 
-      mockPoeClient.detectLanguage.mockResolvedValue('ja');
-      mockPoeClient.translate.mockResolvedValue('你好');
+      mockLlmClient.detectLanguage.mockResolvedValue('ja');
+      mockLlmClient.translate.mockResolvedValue('你好');
 
       const results = await service.multiTranslate(text, targets);
 
@@ -480,7 +480,7 @@ describe('TranslationService - AI言語検出モード（3ステップフロー�
       });
 
       // translate()は1回のみ
-      expect(mockPoeClient.translate).toHaveBeenCalledTimes(1);
+      expect(mockLlmClient.translate).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -488,9 +488,9 @@ describe('TranslationService - AI言語検出モード（3ステップフロー�
     it('unsupportedの場合はルールベースにフォールバックして翻訳する', async () => {
       const text = 'こんにちは'; // 日本語
 
-      mockPoeClient.detectLanguage.mockResolvedValue('unsupported');
+      mockLlmClient.detectLanguage.mockResolvedValue('unsupported');
       mockLanguageDetector.detect.mockReturnValue('ja');
-      mockPoeClient.translate
+      mockLlmClient.translate
         .mockResolvedValueOnce('你好')
         .mockResolvedValueOnce('Hello');
 
@@ -513,13 +513,13 @@ describe('TranslationService - AI言語検出モード（3ステップフロー�
       // ルールベース検出が呼ばれる
       expect(mockLanguageDetector.detect).toHaveBeenCalledWith(text);
       // translate()が2回呼ばれる
-      expect(mockPoeClient.translate).toHaveBeenCalledTimes(2);
+      expect(mockLlmClient.translate).toHaveBeenCalledTimes(2);
     });
 
     it('unsupported+ルールベースもunknownの場合はエラーになる', async () => {
       const text = 'Hello world'; // 英語
 
-      mockPoeClient.detectLanguage.mockResolvedValue('unsupported');
+      mockLlmClient.detectLanguage.mockResolvedValue('unsupported');
       mockLanguageDetector.detect.mockReturnValue('unknown');
 
       const results = await service.multiTranslate(text);
@@ -534,7 +534,7 @@ describe('TranslationService - AI言語検出モード（3ステップフロー�
       });
 
       // translate()は呼ばれない
-      expect(mockPoeClient.translate).not.toHaveBeenCalled();
+      expect(mockLlmClient.translate).not.toHaveBeenCalled();
     });
   });
 
@@ -542,11 +542,11 @@ describe('TranslationService - AI言語検出モード（3ステップフロー�
     it('UnsupportedLanguageErrorの場合もルールベースにフォールバックする', async () => {
       const text = 'こんにちは'; // 日本語
 
-      mockPoeClient.detectLanguage.mockRejectedValue(
+      mockLlmClient.detectLanguage.mockRejectedValue(
         new UnsupportedLanguageError('Unsupported language')
       );
       mockLanguageDetector.detect.mockReturnValue('ja');
-      mockPoeClient.translate
+      mockLlmClient.translate
         .mockResolvedValueOnce('你好')
         .mockResolvedValueOnce('Hello');
 
@@ -567,11 +567,11 @@ describe('TranslationService - AI言語検出モード（3ステップフロー�
     it('その他のエラーの場合はルールベース検出にフォールバックする', async () => {
       const text = 'こんにちは';
 
-      mockPoeClient.detectLanguage.mockRejectedValue(
+      mockLlmClient.detectLanguage.mockRejectedValue(
         new Error('API timeout')
       );
       mockLanguageDetector.detect.mockReturnValue('ja');
-      mockPoeClient.translate
+      mockLlmClient.translate
         .mockResolvedValueOnce('你好')
         .mockResolvedValueOnce('Hello');
 
@@ -594,13 +594,13 @@ describe('TranslationService - AI言語検出モード（3ステップフロー�
       // ルールベース検出が呼ばれる
       expect(mockLanguageDetector.detect).toHaveBeenCalledWith(text);
       // translate()が2回呼ばれる
-      expect(mockPoeClient.translate).toHaveBeenCalledTimes(2);
+      expect(mockLlmClient.translate).toHaveBeenCalledTimes(2);
     });
 
     it('ルールベースフォールバック後もunknownの場合は全エラー', async () => {
       const text = 'Unknown text';
 
-      mockPoeClient.detectLanguage.mockRejectedValue(
+      mockLlmClient.detectLanguage.mockRejectedValue(
         new Error('API timeout')
       );
       mockLanguageDetector.detect.mockReturnValue('unknown');
@@ -622,8 +622,8 @@ describe('TranslationService - AI言語検出モード（3ステップフロー�
     it('detectLanguage()とtranslate()の両方でレート制限が適用される', async () => {
       const text = 'こんにちは';
 
-      mockPoeClient.detectLanguage.mockResolvedValue('ja');
-      mockPoeClient.translate
+      mockLlmClient.detectLanguage.mockResolvedValue('ja');
+      mockLlmClient.translate
         .mockResolvedValueOnce('你好')
         .mockResolvedValueOnce('Hello');
 

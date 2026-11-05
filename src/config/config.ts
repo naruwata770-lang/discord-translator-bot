@@ -16,8 +16,8 @@ export class ConfigStore {
         nodeEnv: this.config.NODE_ENV,
         logLevel: this.config.LOG_LEVEL,
         hasDiscordToken: !!this.config.DISCORD_BOT_TOKEN,
-        hasPoeApiKey: !!this.config.POE_API_KEY,
-        poeModel: this.config.POE_MODEL_NAME,
+        hasAiGatewayApiKey: !!this.config.AI_GATEWAY_API_KEY,
+        aiModel: this.config.AI_MODEL_NAME,
         targetChannelsCount: this.config.TARGET_CHANNELS?.split(',').length || 0,
       });
     } catch (error) {
@@ -29,6 +29,7 @@ export class ConfigStore {
         } : error,
         availableEnvKeys: Object.keys(process.env).filter(key =>
           key.startsWith('DISCORD_') ||
+          key.startsWith('AI_') ||
           key.startsWith('POE_') ||
           key.startsWith('NODE_') ||
           key.startsWith('LOG_')
@@ -54,16 +55,16 @@ export class ConfigStore {
     return this.config.TARGET_CHANNELS.split(',').map((id) => id.trim());
   }
 
-  get poeApiKey(): string {
-    return this.config.POE_API_KEY;
+  get aiGatewayApiKey(): string {
+    return this.config.AI_GATEWAY_API_KEY;
   }
 
-  get poeEndpointUrl(): string {
-    return this.config.POE_ENDPOINT_URL;
+  get aiGatewayBaseUrl(): string {
+    return this.config.AI_GATEWAY_BASE_URL;
   }
 
-  get poeModelName(): string {
-    return this.config.POE_MODEL_NAME;
+  get aiModelName(): string {
+    return this.config.AI_MODEL_NAME;
   }
 
   get rateLimitConcurrent(): number {

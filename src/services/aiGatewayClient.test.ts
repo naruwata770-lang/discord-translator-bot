@@ -1,4 +1,4 @@
-import { PoeApiClient } from './poeApiClient';
+import { AiGatewayClient } from './aiGatewayClient';
 import { TranslationError } from '../utils/errors';
 import { ErrorCode } from '../types';
 
@@ -6,37 +6,92 @@ import { ErrorCode } from '../types';
 global.fetch = jest.fn();
 
 // fetchに渡されたリクエストボディを型付きで取り出すヘルパー
-interface PoeRequestBody {
+interface ChatRequestBody {
   model: string;
   messages: { role: string; content: string }[];
   temperature?: number;
   max_tokens?: number;
 }
 
-function getRequestBody(callIndex: number): PoeRequestBody {
+function getRequestBody(callIndex: number): ChatRequestBody {
   const calls = (global.fetch as jest.Mock).mock.calls as [
     string,
     { body: string },
   ][];
-  return JSON.parse(calls[callIndex][1].body) as PoeRequestBody;
+  return JSON.parse(calls[callIndex][1].body) as ChatRequestBody;
 }
 
-describe('PoeApiClient', () => {
-  let client: PoeApiClient;
+// fetchに渡されたURLを型付きで取り出すヘルパー
+function getRequestUrl(callIndex: number): string {
+  const calls = (global.fetch as jest.Mock).mock.calls as [string, unknown][];
+  return calls[callIndex][0];
+}
+
+describe('AiGatewayClient', () => {
+  let client: AiGatewayClient;
   const mockApiKey = 'test-api-key';
-  const mockEndpoint = 'https://api.poe.com/v1/chat/completions';
-  const mockModel = 'Claude-3.5-Sonnet';
+  const mockBaseUrl = 'https://ai-gateway.vercel.sh/v1';
+  const mockEndpoint = 'https://ai-gateway.vercel.sh/v1/chat/completions';
+  const mockModel = 'openai/gpt-5.4-mini';
 
   beforeEach(() => {
-    client = new PoeApiClient(mockApiKey, mockEndpoint, mockModel);
+    client = new AiGatewayClient(mockApiKey, mockBaseUrl, mockModel);
     jest.clearAllMocks();
 
     // sleep関数をモック化（即座に解決させる）
     // sleepはprivateのため、テスト用に内部メソッドの型として参照する
-    type PoeApiClientInternals = { sleep(ms: number): Promise<void> };
+    type AiGatewayClientInternals = { sleep(ms: number): Promise<void> };
     jest
-      .spyOn(client as unknown as PoeApiClientInternals, 'sleep')
+      .spyOn(client as unknown as AiGatewayClientInternals, 'sleep')
       .mockResolvedValue(undefined);
+  });
+
+  describe('接続先', () => {
+    const okResponse = {
+      ok: true,
+      status: 200,
+      json: (): Promise<unknown> =>
+        Promise.resolve({ choices: [{ message: { content: '你好' } }] }),
+    };
+
+    it('base_urlに/chat/completionsを付けたURLへ送る', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce(okResponse);
+
+      await client.translate('こんにちは', 'ja', 'zh');
+
+      expect(getRequestUrl(0)).toBe(
+        'https://ai-gateway.vercel.sh/v1/chat/completions'
+      );
+    });
+
+    it('base_url末尾のスラッシュを重複させない', async () => {
+      const slashClient = new AiGatewayClient(
+        mockApiKey,
+        'https://ai-gateway.vercel.sh/v1/',
+        mockModel
+      );
+      (global.fetch as jest.Mock).mockResolvedValueOnce(okResponse);
+
+      await slashClient.translate('こんにちは', 'ja', 'zh');
+
+      expect(getRequestUrl(0)).toBe(
+        'https://ai-gateway.vercel.sh/v1/chat/completions'
+      );
+    });
+
+    it('言語検出も同じURLへ送る', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ choices: [{ message: { content: 'ja' } }] }),
+      });
+
+      await client.detectLanguage('こんにちは');
+
+      expect(getRequestUrl(0)).toBe(
+        'https://ai-gateway.vercel.sh/v1/chat/completions'
+      );
+    });
   });
 
   describe('成功ケース', () => {

@@ -11,6 +11,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:smoke": "node scripts/smoke-test.mjs",
+    "verify:gateway": "node scripts/verify-gateway.mjs",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "prepare": "husky install"
@@ -19,7 +20,7 @@
     "discord",
     "bot",
     "translation",
-    "poe",
+    "vercel-ai-gateway",
     "ai"
   ],
   "author": "",
