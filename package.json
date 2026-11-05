@@ -36,7 +36,7 @@
     "js-yaml": "^4.1.1",
     "pino": "^8.17.0",
     "pino-pretty": "^10.3.0",
-    "zod": "^3.22.0"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
