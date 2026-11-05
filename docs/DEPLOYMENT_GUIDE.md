@@ -31,8 +31,8 @@
    - URL: https://discord.com/developers/applications
    - Bot Tokenの取得
 
-4. **Poe API**
-   - URL: https://poe.com/
+4. **Vercel AI Gateway**
+   - URL: https://vercel.com/ai-gateway
    - API Keyの取得
 
 ---
@@ -75,18 +75,18 @@ https://discord.com/developers/applications
 4. 生成されたURLをコピーしてブラウザで開く
 5. Botを招待するサーバーを選択
 
-### 2. Poe API Key取得
+### 2. Vercel AI Gateway API Key取得
 
-#### 2-1. Poeにログイン
+#### 2-1. Vercelにログイン
 
-https://poe.com/
+https://vercel.com/
 
-#### 2-2. API設定ページへ
+#### 2-2. API Keyを作成
 
-1. 右上のユーザーアイコン → 「Settings」
-2. 「API」タブを選択
-3. 「Create API Key」をクリック
-4. API Keyをコピー（後で使用）
+1. ダッシュボードの「AI Gateway」を開く
+2. 「API Keys」から新しいキーを作成
+3. API Keyをコピー（後で `AI_GATEWAY_API_KEY` に設定）
+4. 使えるモデル名は `GET https://ai-gateway.vercel.sh/v1/models` で確認できる（「提供元/モデル」形式）
 
 ### 3. 対象チャンネルID取得
 
@@ -207,9 +207,9 @@ https://railway.app/
 |--------------|-------|------|
 | `DISCORD_BOT_TOKEN` | `YOUR_BOT_TOKEN` | Discord Developer Portalで取得 |
 | `TARGET_CHANNELS` | `123456,789012` | カンマ区切りのチャンネルID |
-| `POE_API_KEY` | `YOUR_POE_API_KEY` | Poeで取得 |
-| `POE_ENDPOINT_URL` | `https://api.poe.com/v1/chat/completions` | デフォルト |
-| `POE_MODEL_NAME` | `gpt-5.4-mini` | 使用するモデル |
+| `AI_GATEWAY_API_KEY` | `YOUR_AI_GATEWAY_API_KEY` | Vercel AI Gatewayで取得 |
+| `AI_GATEWAY_BASE_URL` | `https://ai-gateway.vercel.sh/v1` | デフォルト |
+| `AI_MODEL_NAME` | `openai/gpt-5.4-mini` | 使用するモデル（「提供元/モデル」形式） |
 | `RATE_LIMIT_CONCURRENT` | `1` | 同時リクエスト数 |
 | `RATE_LIMIT_INTERVAL` | `1000` | 最小間隔（ミリ秒） |
 | `LOG_LEVEL` | `info` | ログレベル |
@@ -311,7 +311,7 @@ LOG_LEVEL=warn   # 警告以上のみ
 **原因チェック**:
 1. 環境変数が正しく設定されているか
 2. Discord Bot Tokenが正しいか
-3. Poe API Keyが正しいか
+3. AI Gateway API Key（`AI_GATEWAY_API_KEY`）とモデル名（`AI_MODEL_NAME`）が正しいか
 
 **対処**:
 ```bash
@@ -326,7 +326,7 @@ LOG_LEVEL=debug
 **原因チェック**:
 1. botが対象チャンネルを監視しているか
 2. `TARGET_CHANNELS`が正しく設定されているか
-3. Poe APIのレート制限に達していないか
+3. AI Gatewayのレート制限・クレジット残高に達していないか
 
 **対処**:
 ```bash
@@ -351,9 +351,9 @@ RATE_LIMIT_INTERVAL=2000  # 2秒間隔に変更
 - **Hobbyプラン**: 月$5 + 従量課金
 - **使用量確認**: ダッシュボード「Usage」タブ
 
-#### Poe API料金
+#### Vercel AI Gateway料金
 
-- プランによる（公式サイトで確認）
+- トークン従量課金（Vercelダッシュボードでクレジット残高を確認）
 - 使用量モニタリング推奨
 
 ---
@@ -438,7 +438,7 @@ docker-compose down
 定期的にAPIキーを更新することを推奨:
 
 1. Discord Developer Portalで新しいBot Token生成
-2. Poeで新しいAPI Key生成
+2. Vercel AI Gatewayで新しいAPI Key生成
 3. Railway.appの環境変数を更新
 4. 古いキーを無効化
 
