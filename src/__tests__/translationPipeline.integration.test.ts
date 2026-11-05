@@ -1,11 +1,11 @@
 /**
  * 翻訳パイプライン結合テスト
  *
- * Discordメッセージ受信 → 言語検出 → 辞書マッチ → Poe API呼び出し → Discordへの返信
+ * Discordメッセージ受信 → 言語検出 → 辞書マッチ → AI Gateway呼び出し → Discordへの返信
  * までを、本物のクラス群と本物の辞書（dictionaries/strinova.yaml）で通しで検証する。
  *
  * 外部サービスだけを偽物に差し替える:
- * - Poe API: ローカルに立てたHTTPサーバー（POE_ENDPOINT_URL相当の差し替え）
+ * - AI Gateway: ローカルに立てたHTTPサーバー（AI_GATEWAY_BASE_URL相当の差し替え）
  * - Discord: Messageオブジェクトの最小限のスタブ
  */
 import * as http from 'http';
@@ -16,7 +16,7 @@ import { MessageHandler } from '../discord/messageHandler';
 import { MessageDispatcher } from '../discord/messageDispatcher';
 import { CommandParser } from '../commands/commandParser';
 import { TranslationService } from '../services/translationService';
-import { PoeApiClient } from '../services/poeApiClient';
+import { AiGatewayClient } from '../services/aiGatewayClient';
 import { LanguageDetector } from '../services/languageDetector';
 import { RateLimiter } from '../services/rateLimiter';
 import { DictionaryService } from '../services/dictionaryService';
@@ -28,10 +28,11 @@ jest.mock('../utils/logger', () => ({
 }));
 
 const TARGET_CHANNEL = 'channel-target';
-const API_KEY = 'test-poe-key';
+const API_KEY = 'test-gateway-key';
 const MODEL = 'test-model';
 
-interface PoeRequest {
+interface GatewayRequest {
+  path: string | undefined;
   authorization: string | undefined;
   body: {
     model: string;
@@ -39,10 +40,10 @@ interface PoeRequest {
   };
 }
 
-type PoeReply = { status: number; content?: string };
-type PoeResponder = (req: PoeRequest) => PoeReply;
+type GatewayReply = { status: number; content?: string };
+type GatewayResponder = (req: GatewayRequest) => GatewayReply;
 
-// ---- 偽Poeサーバー ----
+// ---- 偽AI Gatewayサーバー ----
 
 const LANG_NAMES: Record<string, string> = {
   Japanese: 'ja',
@@ -51,12 +52,12 @@ const LANG_NAMES: Record<string, string> = {
 };
 
 /** 言語検出リクエストかどうか（systemメッセージ付きで送られる） */
-function isDetectionRequest(req: PoeRequest): boolean {
+function isDetectionRequest(req: GatewayRequest): boolean {
   return req.body.messages.some((m) => m.role === 'system');
 }
 
 /** 翻訳プロンプトから翻訳先言語を取り出す */
-function targetLangOf(req: PoeRequest): string {
+function targetLangOf(req: GatewayRequest): string {
   const prompt = req.body.messages[req.body.messages.length - 1].content;
   const match = prompt.match(/from (\w+) to (\w+)/);
   if (!match) throw new Error(`Unexpected prompt: ${prompt.slice(0, 80)}`);
@@ -64,14 +65,14 @@ function targetLangOf(req: PoeRequest): string {
 }
 
 /** 翻訳プロンプトの本文を取り出す */
-function promptOf(req: PoeRequest): string {
+function promptOf(req: GatewayRequest): string {
   return req.body.messages[req.body.messages.length - 1].content;
 }
 
 let server: http.Server;
-let endpointUrl: string;
-let requests: PoeRequest[];
-let responder: PoeResponder;
+let baseUrl: string;
+let requests: GatewayRequest[];
+let responder: GatewayResponder;
 
 beforeAll(async () => {
   server = http.createServer((req, res) => {
@@ -80,12 +81,13 @@ beforeAll(async () => {
       raw += chunk.toString();
     });
     req.on('end', () => {
-      const poeReq: PoeRequest = {
+      const gatewayReq: GatewayRequest = {
+        path: req.url,
         authorization: req.headers.authorization,
-        body: JSON.parse(raw) as PoeRequest['body'],
+        body: JSON.parse(raw) as GatewayRequest['body'],
       };
-      requests.push(poeReq);
-      const reply = responder(poeReq);
+      requests.push(gatewayReq);
+      const reply = responder(gatewayReq);
       res.writeHead(reply.status, { 'Content-Type': 'application/json' });
       if (reply.status >= 400) {
         res.end(JSON.stringify({ error: { message: 'mock error' } }));
@@ -98,7 +100,7 @@ beforeAll(async () => {
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
-  endpointUrl = `http://127.0.0.1:${port}/v1/chat/completions`;
+  baseUrl = `http://127.0.0.1:${port}/v1`;
 });
 
 afterAll(async () => {
@@ -141,7 +143,7 @@ function createPipeline(): MessageHandler {
     path.join(__dirname, '../../dictionaries/strinova.yaml')
   );
   const translationService = new TranslationService(
-    new PoeApiClient(API_KEY, endpointUrl, MODEL),
+    new AiGatewayClient(API_KEY, baseUrl, MODEL),
     new LanguageDetector(),
     new RateLimiter(5, 0),
     true, // 本番と同じくAI言語検出を有効にする
@@ -155,8 +157,8 @@ function createPipeline(): MessageHandler {
   );
 }
 
-/** 正常系の偽Poe: 検出は文字種で判定し、翻訳は言語ごとに固定文を返す */
-function happyResponder(translations: Record<string, string>): PoeResponder {
+/** 正常系の偽AI Gateway: 検出は文字種で判定し、翻訳は言語ごとに固定文を返す */
+function happyResponder(translations: Record<string, string>): GatewayResponder {
   return (req) => {
     if (isDetectionRequest(req)) {
       // 検出プロンプト自体が日本語なので、"""で囲まれた判定対象部分だけを見る
@@ -179,8 +181,9 @@ describe('翻訳パイプライン結合テスト', () => {
 
     await handler.handle(message);
 
-    // Poeへのリクエスト: 言語検出1回 + 翻訳2回
+    // AI Gatewayへのリクエスト: 言語検出1回 + 翻訳2回
     expect(requests).toHaveLength(3);
+    expect(requests.every((r) => r.path === '/v1/chat/completions')).toBe(true);
     expect(requests.every((r) => r.authorization === `Bearer ${API_KEY}`)).toBe(true);
     expect(requests.every((r) => r.body.model === MODEL)).toBe(true);
 
@@ -245,7 +248,7 @@ describe('翻訳パイプライン結合テスト', () => {
     expect(content).toContain('🇺🇸 **English**\n⚠️ 翻訳に失敗しました');
   });
 
-  it('Poeが認証エラーを返した場合は、ユーザー向けのエラーメッセージを送る', async () => {
+  it('AI Gatewayが認証エラーを返した場合は、ユーザー向けのエラーメッセージを送る', async () => {
     responder = () => ({ status: 401 });
     const handler = createPipeline();
     const { message, reply, send } = createMessage('こんにちは');
@@ -260,7 +263,7 @@ describe('翻訳パイプライン結合テスト', () => {
     );
   });
 
-  it('対象外チャンネルやbotのメッセージではPoeを呼ばない', async () => {
+  it('対象外チャンネルやbotのメッセージではAI Gatewayを呼ばない', async () => {
     responder = happyResponder({ zh: '你好。', en: 'Hello.' });
     const handler = createPipeline();
     const other = createMessage('こんにちは', { channelId: 'channel-other' });

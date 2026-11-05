@@ -7,7 +7,7 @@ AI言語検出機能（Phase 2）を含む最新版のデプロイ方法を説�
 ## 前提条件
 - Railway.appアカウントを作成済み
 - GitHubリポジトリと連携済み
-- Poe APIキーを取得済み
+- Vercel AI GatewayのAPIキー（`AI_GATEWAY_API_KEY`）を取得済み
 - Discord Botトークンを取得済み
 
 ---
@@ -29,10 +29,10 @@ Railway.appダッシュボードで以下の環境変数を設定：
 DISCORD_BOT_TOKEN=<your_discord_bot_token>
 TARGET_CHANNELS=<channel_id_1>,<channel_id_2>
 
-# Poe API設定
-POE_API_KEY=<your_poe_api_key>
-POE_ENDPOINT_URL=https://api.poe.com/v1/chat/completions
-POE_MODEL_NAME=gpt-5.4-mini
+# Vercel AI Gateway設定（OpenAI互換API）
+AI_GATEWAY_API_KEY=<your_ai_gateway_api_key>
+AI_GATEWAY_BASE_URL=https://ai-gateway.vercel.sh/v1
+AI_MODEL_NAME=openai/gpt-5.4-mini
 
 # レート制限設定
 RATE_LIMIT_CONCURRENT=1
@@ -164,7 +164,7 @@ Railway.appのログで以下のエラーがないか確認：
 
 ```bash
 # 認証エラー
-ERROR: Poe API Error: 401 Unauthorized
+ERROR: AI Gateway API Error: 401 Unauthorized
 
 # レート制限エラー
 WARN: Rate limit hit, retrying after 5000ms
@@ -186,15 +186,16 @@ ERROR: Network error during API call
 3. `npm run build`がエラーなく完了しているか確認
 
 ### 4.2 翻訳が動作しない
-**原因**: Poe APIの認証エラー
+**原因**: AI Gatewayの認証エラー、またはモデル名の誤り
 
 **対策**:
-1. `POE_API_KEY`が正しいか確認
-2. Poe APIの利用上限を確認
-3. Railway.appのログで`AUTH_ERROR`を確認
+1. `AI_GATEWAY_API_KEY`が正しいか確認
+2. `AI_MODEL_NAME`が「提供元/モデル」形式（例: `openai/gpt-5.4-mini`）で、`GET https://ai-gateway.vercel.sh/v1/models` の一覧にあるか確認
+3. Vercelダッシュボードでクレジット残高を確認
+4. Railway.appのログで`AUTH_ERROR`を確認
 
 ### 4.3 AI検出が失敗する
-**原因**: Poe APIの応答が不正
+**原因**: AI Gatewayの応答が不正
 
 **対策**:
 1. Railway.appのログで`ValidationError`を確認
@@ -206,8 +207,7 @@ ERROR: Network error during API call
 
 **対策**:
 1. `RATE_LIMIT_CONCURRENT`と`RATE_LIMIT_INTERVAL`を調整
-2. Poe APIのレート制限を確認
-3. 必要に応じてPoe APIのプランをアップグレード
+2. Vercel AI Gatewayのレート制限・クレジット残高を確認
 
 ---
 
@@ -218,8 +218,8 @@ ERROR: Network error during API call
 - **使用量**: CPU、メモリ、ネットワークの使用量に応じて課金
 - **推定コスト**: 月$5〜$10
 
-### 5.2 Poe APIの料金
-- **使用量ベース**: トークン消費量に応じて課金
+### 5.2 Vercel AI Gatewayの料金
+- **使用量ベース**: トークン消費量に応じてクレジットから引かれる（Vercelダッシュボードで残高を確認）
 - **推定コスト**: 月$5〜$15（翻訳頻度による）
 - **節約方法**:
   - `max_tokens=1000`で制限
@@ -304,9 +304,9 @@ Railway.appはプロセスがクラッシュした場合、自動的に再起動
 |--------|------|-----------|------|
 | `DISCORD_BOT_TOKEN` | ✅ | - | DiscordのBotトークン |
 | `TARGET_CHANNELS` | ✅ | - | 対象チャンネルID（カンマ区切り） |
-| `POE_API_KEY` | ✅ | - | Poe APIキー |
-| `POE_ENDPOINT_URL` | ⚠️ | https://api.poe.com/v1/chat/completions | Poe APIのエンドポイントURL |
-| `POE_MODEL_NAME` | ⚠️ | gpt-5.4-mini | 使用するモデル名 |
+| `AI_GATEWAY_API_KEY` | ✅ | - | Vercel AI GatewayのAPIキー |
+| `AI_GATEWAY_BASE_URL` | ⚠️ | https://ai-gateway.vercel.sh/v1 | OpenAI互換APIのbase URL（`/chat/completions` はbotが付ける） |
+| `AI_MODEL_NAME` | ⚠️ | openai/gpt-5.4-mini | 使用するモデル名（「提供元/モデル」形式） |
 | `RATE_LIMIT_CONCURRENT` | ⚠️ | 1 | 最大同時実行数 |
 | `RATE_LIMIT_INTERVAL` | ⚠️ | 1000 | リクエスト間隔（ミリ秒） |
 | `LOG_LEVEL` | ⚠️ | info | ログレベル |

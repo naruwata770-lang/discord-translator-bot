@@ -1,4 +1,4 @@
-import { PoeApiClient } from './poeApiClient';
+import { AiGatewayClient } from './aiGatewayClient';
 import { LanguageDetector } from './languageDetector';
 import { RateLimiter } from './rateLimiter';
 import { DictionaryService } from './dictionaryService';
@@ -14,7 +14,7 @@ import logger from '../utils/logger';
 
 export class TranslationService {
   constructor(
-    private poeClient: PoeApiClient,
+    private llmClient: AiGatewayClient,
     private languageDetector: LanguageDetector,
     private rateLimiter: RateLimiter,
     private useAiDetection: boolean = false,
@@ -42,7 +42,7 @@ export class TranslationService {
       try {
         await this.rateLimiter.acquire();
         try {
-          const detectedLang = await this.poeClient.detectLanguage(text);
+          const detectedLang = await this.llmClient.detectLanguage(text);
 
           if (detectedLang === 'unsupported') {
             // AIがunsupportedと判定しても、ルールベースにフォールバック
@@ -128,7 +128,7 @@ export class TranslationService {
           }
         }
 
-        // 3.2 翻訳実行（辞書ヒントを含めて直接poeClientを呼び出す）
+        // 3.2 翻訳実行（辞書ヒントを含めて直接llmClientを呼び出す）
         await this.rateLimiter.acquire();
         try {
           logger.debug('Multi-translate request', {
@@ -138,7 +138,7 @@ export class TranslationService {
             hasDictionaryHint: !!dictionaryHint,
           });
 
-          const translatedText = await this.poeClient.translate(
+          const translatedText = await this.llmClient.translate(
             text,
             sourceLang,
             target.lang,

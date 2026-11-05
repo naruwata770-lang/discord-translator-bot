@@ -4,7 +4,7 @@ import { MessageDispatcher } from './discord/messageDispatcher';
 import { ReactionHandler } from './discord/reactionHandler';
 import { CommandParser } from './commands/commandParser';
 import { TranslationService } from './services/translationService';
-import { PoeApiClient } from './services/poeApiClient';
+import { AiGatewayClient } from './services/aiGatewayClient';
 import { LanguageDetector } from './services/languageDetector';
 import { RateLimiter } from './services/rateLimiter';
 import { DictionaryService } from './services/dictionaryService';
@@ -51,10 +51,10 @@ async function main(): Promise<void> {
       config.rateLimitConcurrent,
       config.rateLimitInterval
     );
-    const poeApiClient = new PoeApiClient(
-      config.poeApiKey,
-      config.poeEndpointUrl,
-      config.poeModelName
+    const aiGatewayClient = new AiGatewayClient(
+      config.aiGatewayApiKey,
+      config.aiGatewayBaseUrl,
+      config.aiModelName
     );
 
     // 辞書サービスの初期化（オプショナル）
@@ -73,7 +73,7 @@ async function main(): Promise<void> {
     }
 
     const translationService = new TranslationService(
-      poeApiClient,
+      aiGatewayClient,
       languageDetector,
       rateLimiter,
       config.useAiDetection,

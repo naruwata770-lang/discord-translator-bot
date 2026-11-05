@@ -5,13 +5,20 @@ export const envSchema = z.object({
   DISCORD_BOT_TOKEN: z.string().min(1, 'DISCORD_BOT_TOKEN is required'),
   TARGET_CHANNELS: z.string().optional(),
 
-  // Poe API設定
-  POE_API_KEY: z.string().min(1, 'POE_API_KEY is required'),
-  POE_ENDPOINT_URL: z
+  // Vercel AI Gateway設定（OpenAI互換API）
+  AI_GATEWAY_API_KEY: z.string().min(1, 'AI_GATEWAY_API_KEY is required'),
+  AI_GATEWAY_BASE_URL: z
     .string()
     .url()
-    .default('https://api.poe.com/v1/chat/completions'),
-  POE_MODEL_NAME: z.string().default('gpt-5.4-mini'),
+    .default('https://ai-gateway.vercel.sh/v1'),
+  // モデル名は「提供元/モデル」の形式（例: openai/gpt-5.4-mini）
+  AI_MODEL_NAME: z
+    .string()
+    .regex(
+      /^[^/\s]+\/[^\s]+$/,
+      'AI_MODEL_NAME must be in provider/model format (e.g. openai/gpt-5.4-mini)'
+    )
+    .default('openai/gpt-5.4-mini'),
 
   // レート制限設定
   RATE_LIMIT_CONCURRENT: z
