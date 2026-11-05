@@ -73,7 +73,7 @@ async function main(): Promise<void> {
     }
 
     const translationService = new TranslationService(
-      poeApiClient,
+      aiGatewayClient,
       languageDetector,
       rateLimiter,
       config.useAiDetection,

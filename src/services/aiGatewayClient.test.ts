@@ -21,6 +21,12 @@ function getRequestBody(callIndex: number): ChatRequestBody {
   return JSON.parse(calls[callIndex][1].body) as ChatRequestBody;
 }
 
+// fetchに渡されたURLを型付きで取り出すヘルパー
+function getRequestUrl(callIndex: number): string {
+  const calls = (global.fetch as jest.Mock).mock.calls as [string, unknown][];
+  return calls[callIndex][0];
+}
+
 describe('AiGatewayClient', () => {
   let client: AiGatewayClient;
   const mockApiKey = 'test-api-key';
@@ -44,7 +50,8 @@ describe('AiGatewayClient', () => {
     const okResponse = {
       ok: true,
       status: 200,
-      json: () => Promise.resolve({ choices: [{ message: { content: '你好' } }] }),
+      json: (): Promise<unknown> =>
+        Promise.resolve({ choices: [{ message: { content: '你好' } }] }),
     };
 
     it('base_urlに/chat/completionsを付けたURLへ送る', async () => {
@@ -52,7 +59,7 @@ describe('AiGatewayClient', () => {
 
       await client.translate('こんにちは', 'ja', 'zh');
 
-      expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe(
+      expect(getRequestUrl(0)).toBe(
         'https://ai-gateway.vercel.sh/v1/chat/completions'
       );
     });
@@ -67,7 +74,7 @@ describe('AiGatewayClient', () => {
 
       await slashClient.translate('こんにちは', 'ja', 'zh');
 
-      expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe(
+      expect(getRequestUrl(0)).toBe(
         'https://ai-gateway.vercel.sh/v1/chat/completions'
       );
     });
@@ -81,7 +88,7 @@ describe('AiGatewayClient', () => {
 
       await client.detectLanguage('こんにちは');
 
-      expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe(
+      expect(getRequestUrl(0)).toBe(
         'https://ai-gateway.vercel.sh/v1/chat/completions'
       );
     });
